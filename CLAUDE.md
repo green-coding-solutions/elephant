@@ -53,6 +53,13 @@ Python with venv, pip, and pytest
 - **Add tests for new functionality**
 - **If you do measurements, persist the used scripts / commands** - measurements should be repeatable
 
+## Project Structure
+
+- `elephant/` - Main package (app.py for API, config.py, models.py)
+- `elephant/providers/` - Data provider implementations
+- `tests/` - Test suite with corresponding test files
+- `config.example.yml` - Configuration template
+
 ## Project Files
 
 - [README.md](./README.md) - Overview with links to detailed docs
