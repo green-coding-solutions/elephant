@@ -1,0 +1,17 @@
+# Development dependencies
+
+# Testing framework
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Code quality
+pylint>=2.15.0
+
+# Type checking
+mypy>=1.0.0
+
+# Code formatting
+black>=22.0.0
+
+# Pre-commit hooks
+pre-commit>=3.0.0
