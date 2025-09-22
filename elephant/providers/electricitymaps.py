@@ -76,9 +76,10 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
     ) -> List[CarbonIntensityResponse]:
         """Get historical carbon intensity data for a location and time range."""
         try:
+            # ElectricityMaps history endpoint only returns last 24 hours
             response = await self.client.get(
                 "/v3/carbon-intensity/history",
-                params={"zone": location, "datetime": start_time.isoformat(), "datetime_end": end_time.isoformat()},
+                params={"zone": location},
             )
 
             if response.status_code == 429:
@@ -88,14 +89,22 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
 
             history_data = response.json().get("history", [])
 
-            return [
-                CarbonIntensityResponse(
-                    location=location,
-                    time=datetime.fromisoformat(item["datetime"].replace("Z", "+00:00")),
-                    carbon_intensity=item["carbonIntensity"],
-                )
-                for item in history_data
-            ]
+            # Convert to CarbonIntensityResponse objects and filter by time range
+            results = []
+            for item in history_data:
+                item_time = datetime.fromisoformat(item["datetime"].replace("Z", "+00:00"))
+
+                # Filter to only include data within the requested time range
+                if start_time <= item_time < end_time:
+                    results.append(
+                        CarbonIntensityResponse(
+                            location=location,
+                            time=item_time,
+                            carbon_intensity=item["carbonIntensity"],
+                        )
+                    )
+
+            return results
 
         except httpx.HTTPStatusError as e:
             self._handle_http_error(e)
