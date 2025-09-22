@@ -6,7 +6,7 @@
 |---------|--------|-------|
 | **API Endpoints** | | |
 | `GET /carbon-intensity/current` | ✅ **Implemented** | Full validation, error handling |
-| `GET /carbon-intensity/history` | ❌ **Not Implemented** | Planned for future |
+| `GET /carbon-intensity/history` | ✅ **Implemented** | Full validation, error handling |
 | `POST /simulation/timepoints` | ❌ **Not Implemented** | Core simulation feature |
 | `POST /simulation/ranges` | ❌ **Not Implemented** | Core simulation feature |
 | `GET /simulation/{sessionId}` | ❌ **Not Implemented** | Core simulation feature |

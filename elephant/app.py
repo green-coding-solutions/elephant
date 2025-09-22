@@ -2,7 +2,8 @@
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Optional, Any, AsyncGenerator, Dict
+from typing import Optional, Any, AsyncGenerator, Dict, List
+from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -93,6 +94,60 @@ async def get_current_carbon_intensity(
     if "electricitymaps" in carbon_providers:
         try:
             return await carbon_providers["electricitymaps"].get_current(location)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Unexpected error from ElectricityMaps provider: %s", e)
+            raise HTTPException(status_code=503, detail="Carbon intensity service temporarily unavailable") from e
+
+    raise HTTPException(
+        status_code=503,
+        detail="No carbon intensity providers available. Use simulation endpoints for testing scenarios.",
+    )
+
+
+@app.get("/carbon-intensity/history", response_model=List[CarbonIntensityResponse])
+async def get_carbon_intensity_history(
+    location: str = Query(..., description="Country code (e.g., 'DE', 'US', 'FR')"),
+    startTime: str = Query(..., description="Start time in ISO 8601 format (e.g., '2025-09-22T10:00:00Z')"),
+    endTime: str = Query(..., description="End time in ISO 8601 format (e.g., '2025-09-22T12:00:00Z')"),
+) -> List[CarbonIntensityResponse]:
+    """Get historical carbon grid intensity for a location and time range."""
+    if not location:
+        raise HTTPException(status_code=400, detail="Location parameter is required")
+
+    if not startTime:
+        raise HTTPException(status_code=400, detail="startTime parameter is required")
+
+    if not endTime:
+        raise HTTPException(status_code=400, detail="endTime parameter is required")
+
+    # Validate location format (ISO 3166-1 alpha-2)
+    if len(location) != 2 or not location.isalpha():
+        raise HTTPException(
+            status_code=400, detail="Location must be a valid ISO 3166-1 alpha-2 country code (e.g., 'DE', 'US')"
+        )
+
+    location = location.upper()
+
+    # Parse datetime strings
+    try:
+        start_dt = datetime.fromisoformat(startTime.replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(endTime.replace("Z", "+00:00"))
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid datetime format. Use ISO 8601 format (e.g., '2025-09-22T10:00:00Z'): {str(e)}",
+        ) from e
+
+    # Validate time range
+    if start_dt >= end_dt:
+        raise HTTPException(status_code=400, detail="startTime must be before endTime")
+
+    # Try ElectricityMaps provider first
+    if "electricitymaps" in carbon_providers:
+        try:
+            return await carbon_providers["electricitymaps"].get_historical(location, start_dt, end_dt)
         except HTTPException:
             raise
         except Exception as e:

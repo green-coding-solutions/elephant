@@ -62,6 +62,13 @@ python3 -m elephant --port 8080
 curl "http://localhost:8000/carbon-intensity/current?location=DE"
 ```
 
+### Historical Carbon Intensity
+
+```bash
+# Get historical data for Germany from 10:00 to 12:00 UTC
+curl "http://localhost:8000/carbon-intensity/history?location=DE&startTime=2025-09-22T10:00:00Z&endTime=2025-09-22T12:00:00Z"
+```
+
 ### Health Check
 
 ```bash
