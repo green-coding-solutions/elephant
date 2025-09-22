@@ -1,0 +1,40 @@
+# Elephant Carbon Grid Intensity Service Configuration
+# Copy this file to config.yml and fill in your API tokens
+
+# Provider configuration
+providers:
+  electricitymaps:
+    enabled: true
+    base_url: "https://api.electricitymaps.com"
+    api_token: "your-electricitymaps-api-token-here"
+
+  carbon_aware_sdk:
+    enabled: false
+    base_url: "http://localhost:8080"
+    api_token: null  # No token needed for local deployment
+
+  carbon_aware_computing:
+    enabled: false
+    base_url: "https://intensity.carbon-aware-computing.com"
+    api_token: "your-carbon-aware-computing-api-token-here"
+
+# Background polling configuration
+polling:
+  enabled: true
+  interval_minutes: 5  # Default: 5 minutes
+
+# Data retention
+cache:
+  retention_hours: 24  # Default: 1 day
+
+# Simulation settings
+simulation:
+  session_expiry_hours: 1
+  max_data_points: 1000        # Maximum data points per simulation
+  max_concurrent_sessions: 100  # Maximum concurrent sessions
+  time_unit: "seconds"
+  cleanup_interval_minutes: 15  # How often to clean expired sessions
+
+# Logging
+logging:
+  level: "INFO"

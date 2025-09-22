@@ -1,5 +1,49 @@
 # Elephant Service Specification
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **API Endpoints** | | |
+| `GET /carbon-intensity/current` | ✅ **Implemented** | Full validation, error handling |
+| `GET /carbon-intensity/history` | ❌ **Not Implemented** | Planned for future |
+| `POST /simulation/timepoints` | ❌ **Not Implemented** | Core simulation feature |
+| `POST /simulation/ranges` | ❌ **Not Implemented** | Core simulation feature |
+| `GET /simulation/{sessionId}` | ❌ **Not Implemented** | Core simulation feature |
+| `GET /simulation/{sessionId}/current` | ❌ **Not Implemented** | Core simulation feature |
+| `GET /simulations` | ❌ **Not Implemented** | Management feature |
+| `GET /health` | ✅ **Implemented** | Basic health check |
+| **Data Providers** | | |
+| ElectricityMaps Integration | ✅ **Implemented** | Full API integration, error handling |
+| Carbon-Aware-SDK Support | ❌ **Not Implemented** | Planned for future |
+| Carbon-Aware-Computing Support | ❌ **Not Implemented** | Planned for future |
+| **Configuration** | | |
+| YAML Configuration Loading | ✅ **Implemented** | Provider-specific validation |
+| Startup Validation | ✅ **Implemented** | Graceful handling of missing providers |
+| Provider Token Validation | ✅ **Implemented** | Provider-specific requirements |
+| **Core Features** | | |
+| FastAPI Application | ✅ **Implemented** | With lifecycle management |
+| Data Models & Validation | ✅ **Implemented** | Pydantic v2, carbon intensity bounds |
+| Error Handling | ✅ **Implemented** | Proper HTTP status codes, provider errors |
+| **Simulation Engine** | | |
+| Session Management | ❌ **Not Implemented** | Core differentiator |
+| Time Points Simulation | ❌ **Not Implemented** | Core differentiator |
+| Time Ranges Simulation | ❌ **Not Implemented** | Core differentiator |
+| Real-time Playback | ❌ **Not Implemented** | Core differentiator |
+| **Testing & Quality** | | |
+| Unit Tests | ✅ **Implemented** | 22 tests, all passing |
+| Configuration Tests | ✅ **Implemented** | Provider validation |
+| API Integration Tests | ✅ **Implemented** | Endpoint validation |
+| **Deployment** | | |
+| Docker Support | 🟡 **Partial** | Basic structure, needs Dockerfile |
+| Example Configuration | ✅ **Implemented** | `config.example.yml` |
+
+**Legend:**
+
+- ✅ **Implemented**: Feature is complete and tested
+- 🟡 **Partial**: Feature is partially implemented
+- ❌ **Not Implemented**: Feature is planned but not started
+
 ## Overview
 
 **Elephant** is a specialized dockerized Carbon Grid Intensity (CGI) service focused on **simulation capabilities** for carbon intensity scenarios. While it can provide current and historical carbon intensity data from multiple providers, its primary differentiator is the advanced simulation functionality for testing and modeling carbon-aware computing scenarios.
