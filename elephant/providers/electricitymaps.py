@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from .base import CarbonIntensityProvider
 from ..models import CarbonIntensityResponse, ElectricityMapsResponse
 from ..config import ProviderConfig
+from ..utils.time_range_filter import TimeRangeFilter
 
 
 logger = logging.getLogger(__name__)
@@ -72,7 +73,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
             self._handle_request_error(e)
 
     async def get_historical(
-        self, location: str, start_time: datetime, end_time: datetime
+        self, location: str, start_time: datetime, end_time: datetime, interpolate: bool = False
     ) -> List[CarbonIntensityResponse]:
         """Get historical carbon intensity data for a location and time range."""
         try:
@@ -89,22 +90,20 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
 
             history_data = response.json().get("history", [])
 
-            # Convert to CarbonIntensityResponse objects and filter by time range
-            results = []
+            # Convert to CarbonIntensityResponse objects
+            all_data = []
             for item in history_data:
                 item_time = datetime.fromisoformat(item["datetime"].replace("Z", "+00:00"))
-
-                # Filter to only include data within the requested time range
-                if start_time <= item_time < end_time:
-                    results.append(
-                        CarbonIntensityResponse(
-                            location=location,
-                            time=item_time,
-                            carbon_intensity=item["carbonIntensity"],
-                        )
+                all_data.append(
+                    CarbonIntensityResponse(
+                        location=location,
+                        time=item_time,
+                        carbon_intensity=item["carbonIntensity"],
                     )
+                )
 
-            return results
+            # Use TimeRangeFilter to filter data based on the requested time range and interpolation mode
+            return TimeRangeFilter.filter_data(all_data, start_time, end_time, interpolate)
 
         except httpx.HTTPStatusError as e:
             self._handle_http_error(e)

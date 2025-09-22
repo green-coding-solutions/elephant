@@ -203,3 +203,33 @@ class TestElectricityMapsProvider:
         with patch.object(electricitymaps_provider.client, "get", return_value=mock_response):
             result = await electricitymaps_provider.get_historical("DE", start_time, end_time)
             assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_historical_with_interpolation(self, electricitymaps_provider: ElectricityMapsProvider) -> None:
+        """Test that interpolation parameter is properly passed to TimeRangeFilter."""
+        mock_response_data = {
+            "history": [
+                {"datetime": "2025-09-22T10:00:00.000Z", "carbonIntensity": 241.0},
+                {"datetime": "2025-09-22T11:00:00.000Z", "carbonIntensity": 235.0},
+            ]
+        }
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_response_data
+        mock_response.raise_for_status.return_value = None
+
+        start_time = datetime.fromisoformat("2025-09-22T10:15:00+00:00")
+        end_time = datetime.fromisoformat("2025-09-22T10:45:00+00:00")
+
+        with patch.object(electricitymaps_provider.client, "get", return_value=mock_response):
+            # Test that interpolate=True works (TimeRangeFilter details tested separately)
+            result = await electricitymaps_provider.get_historical("DE", start_time, end_time, interpolate=True)
+
+            # Verify provider correctly converts API response to CarbonIntensityResponse objects
+            assert len(result) == 2
+            assert all(
+                hasattr(item, "location") and hasattr(item, "time") and hasattr(item, "carbonIntensity")
+                for item in result
+            )
+            assert all(item.location == "DE" for item in result)

@@ -16,6 +16,6 @@ class CarbonIntensityProvider(ABC):
 
     @abstractmethod
     async def get_historical(
-        self, location: str, start_time: datetime, end_time: datetime
+        self, location: str, start_time: datetime, end_time: datetime, interpolate: bool = False
     ) -> List[CarbonIntensityResponse]:
         """Get historical carbon intensity data for a location and time range."""

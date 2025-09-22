@@ -79,7 +79,17 @@ curl "http://localhost:8000/carbon-intensity/current?location=DE"
 ```bash
 # Get historical data for Germany from 10:00 to 12:00 UTC
 curl "http://localhost:8000/carbon-intensity/history?location=DE&startTime=2025-09-22T10:00:00Z&endTime=2025-09-22T12:00:00Z"
+
+# Get data with interpolation support (includes bracketing data points for time ranges between hourly measurements)
+curl "http://localhost:8000/carbon-intensity/history?location=DE&startTime=2025-09-22T10:15:00Z&endTime=2025-09-22T10:45:00Z&interpolate=true"
 ```
+
+**Parameters:**
+
+- `location`: ISO 3166-1 alpha-2 country code (e.g., 'DE', 'US', 'FR')
+- `startTime`: Start time in ISO 8601 format (e.g., '2025-09-22T10:00:00Z')
+- `endTime`: End time in ISO 8601 format (e.g., '2025-09-22T12:00:00Z')
+- `interpolate` (optional): When `true`, includes data points that bracket the requested time range, useful for interpolation between hourly measurements. Default: `false`
 
 ### Health Check
 

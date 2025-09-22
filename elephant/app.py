@@ -115,6 +115,7 @@ async def get_carbon_intensity_history(
     location: str = Query(..., description="Country code (e.g., 'DE', 'US', 'FR')"),
     startTime: str = Query(..., description="Start time in ISO 8601 format (e.g., '2025-09-22T10:00:00Z')"),
     endTime: str = Query(..., description="End time in ISO 8601 format (e.g., '2025-09-22T12:00:00Z')"),
+    interpolate: bool = Query(False, description="Include data points that bracket the time range for interpolation"),
 ) -> List[CarbonIntensityResponse]:
     """Get historical carbon grid intensity for a location and time range."""
     if not location:
@@ -151,7 +152,7 @@ async def get_carbon_intensity_history(
     # Try ElectricityMaps provider first
     if "electricitymaps" in carbon_providers:
         try:
-            return await carbon_providers["electricitymaps"].get_historical(location, start_dt, end_dt)
+            return await carbon_providers["electricitymaps"].get_historical(location, start_dt, end_dt, interpolate)
         except HTTPException:
             raise
         except Exception as e:
