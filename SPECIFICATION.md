@@ -31,11 +31,11 @@
 | Time Ranges Simulation | ❌ **Not Implemented** | Core differentiator |
 | Real-time Playback | ❌ **Not Implemented** | Core differentiator |
 | **Testing & Quality** | | |
-| Unit Tests | ✅ **Implemented** | 22 tests, all passing |
+| Unit Tests | ✅ **Implemented** | multiple tests added, all passing |
 | Configuration Tests | ✅ **Implemented** | Provider validation |
 | API Integration Tests | ✅ **Implemented** | Endpoint validation |
 | **Deployment** | | |
-| Docker Support | 🟡 **Partial** | Basic structure, needs Dockerfile |
+| Docker Support | ✅ **Implemented** | See `Dockerfile` |
 | Example Configuration | ✅ **Implemented** | `config.example.yml` |
 
 **Legend:**
@@ -566,20 +566,8 @@ class CarbonIntensityData:
 
 Dockerfile Requirements:
 
-```dockerfile
-FROM python:3.10-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-Configuration:
-
-- All configuration via YAML file
-- No environment variables needed
+- Use a current slim Python image as base
+- All configuration via YAML file (no environment variables needed)
 - Default config path: `/app/config.yml`
 
 ## Dependencies

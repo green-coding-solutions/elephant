@@ -1,0 +1,33 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+venv/
+.venv/
+
+# Git and development tools
+.git/
+.gitignore
+.pytest_cache/
+.coverage
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment files
+.env*
+
+# Documentation and development files
+*.md
+tests/
+requirements-dev.txt
+pyproject.toml
+
+# Local configuration
+config.yml

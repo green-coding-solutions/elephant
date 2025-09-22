@@ -42,6 +42,8 @@ cp config.example.yml config.yml
 
 ## Quick Start
 
+### Local Development
+
 ```bash
 # Activate virtual environment
 source venv/bin/activate
@@ -51,6 +53,16 @@ python3 -m elephant --debug
 
 # Or start on custom port
 python3 -m elephant --port 8080
+```
+
+### Docker Deployment
+
+```bash
+# Build the Docker image
+docker build -t elephant .
+
+# Run with configuration file (mount config.yml from current directory)
+docker run -p 8000:8000 -v $(pwd)/config.yml:/app/config.yml --name elephant elephant
 ```
 
 ## API Usage
