@@ -1,6 +1,7 @@
 """Main FastAPI application for Elephant service."""
 
 import logging
+import inspect
 from contextlib import asynccontextmanager
 from typing import Optional, Any, AsyncGenerator, Dict, List
 from datetime import datetime
@@ -56,7 +57,10 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
         for provider in carbon_providers.values():
             close_method = getattr(provider, "close", None)
             if close_method and callable(close_method):
-                await close_method()
+                if inspect.iscoroutinefunction(close_method):
+                    await close_method()
+                else:
+                    close_method()
         logger.info("Application shutdown complete")
 
 
