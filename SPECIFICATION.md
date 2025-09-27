@@ -544,10 +544,15 @@ class CarbonIntensityData:
 
 ### Provider Failures
 
-- **Graceful Degradation**: When providers are temporarily unavailable:
-  - Return HTTP 503 Service Unavailable with appropriate error message
-  - Log errors for monitoring
-  - Continue serving simulation endpoints (unaffected by provider status)
+- **Error Response Mapping**: Provider errors are mapped to appropriate HTTP status codes:
+  - **401 (Authentication)**: Return HTTP 401 (authentication required)
+  - **403 (Forbidden)**: Return HTTP 403 (insufficient permissions)
+  - **400 (Bad Request)**: Return HTTP 400 (client error)
+  - **404 (Not Found)**: Return HTTP 404 (resource not found)
+  - **Other 4xx**: Return HTTP 400 (generic client error)
+  - **5xx/Network errors**: Return HTTP 503 (service unavailable)
+- **Error Logging**: All provider errors are logged for monitoring
+- **Graceful Degradation**: Continue serving simulation endpoints (unaffected by provider status)
 
 ### Rate Limiting
 

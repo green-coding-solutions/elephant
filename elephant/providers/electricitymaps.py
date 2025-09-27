@@ -28,9 +28,6 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
         """Handle HTTP errors from ElectricityMaps API."""
         logger.error("ElectricityMaps API error: %s - %s", error.response.status_code, error.response.text)
 
-        if error.response.status_code == 429:
-            raise HTTPException(status_code=429, detail="Rate limit exceeded")
-
         # Try to extract meaningful error from JSON response
         try:
             error_data = error.response.json()
@@ -38,15 +35,23 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
         except (ValueError, KeyError):
             error_message = error.response.text
 
-        # Determine appropriate error message based on status code
-        if error.response.status_code in [401, 403]:
-            detail = f"ElectricityMaps configuration error: {error_message}"
-        elif error.response.status_code == 400:
-            detail = f"ElectricityMaps invalid request: {error_message}"
-        else:
-            detail = f"ElectricityMaps service temporarily unavailable: {error_message}"
+        # Map ElectricityMaps status codes to appropriate HTTP responses
+        status_mappings = {
+            400: (400, f"ElectricityMaps invalid request: {error_message}"),
+            401: (401, f"ElectricityMaps authentication failed: {error_message}"),
+            403: (403, f"ElectricityMaps access denied: {error_message}"),
+            404: (404, f"ElectricityMaps resource not found: {error_message}"),
+            429: (429, "Rate limit exceeded"),
+        }
 
-        raise HTTPException(status_code=503, detail=detail)
+        if error.response.status_code in status_mappings:
+            status_code, detail = status_mappings[error.response.status_code]
+        elif 400 <= error.response.status_code < 500:
+            status_code, detail = 400, f"ElectricityMaps client error: {error_message}"
+        else:
+            status_code, detail = 503, f"ElectricityMaps service temporarily unavailable: {error_message}"
+
+        raise HTTPException(status_code=status_code, detail=detail)
 
     def _handle_request_error(self, error: httpx.RequestError) -> NoReturn:
         """Handle request errors from ElectricityMaps API."""
@@ -57,10 +62,6 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
         """Get current carbon intensity for a location."""
         try:
             response = await self.client.get("/v3/carbon-intensity/latest", params={"zone": location})
-
-            if response.status_code == 429:
-                raise HTTPException(status_code=429, detail="Rate limit exceeded")
-
             response.raise_for_status()
 
             data = ElectricityMapsResponse(**response.json())
@@ -82,10 +83,6 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                 "/v3/carbon-intensity/history",
                 params={"zone": location},
             )
-
-            if response.status_code == 429:
-                raise HTTPException(status_code=429, detail="Rate limit exceeded")
-
             response.raise_for_status()
 
             history_data = response.json().get("history", [])
