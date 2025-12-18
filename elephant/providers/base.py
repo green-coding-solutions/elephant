@@ -4,18 +4,15 @@ from abc import ABC, abstractmethod
 from typing import List
 from datetime import datetime
 
-from ..models import CarbonIntensityResponse
-
 
 class CarbonIntensityProvider(ABC):
     """Abstract base class for carbon intensity providers."""
 
     @abstractmethod
-    async def get_current(self, location: str) -> CarbonIntensityResponse:
-        """Get current carbon intensity for a location."""
+    def get_current(self, region: str) -> List[dict]:
+        """Get current carbon intensity for a region."""
 
     @abstractmethod
-    async def get_historical(
-        self, location: str, start_time: datetime, end_time: datetime, interpolate: bool = False
-    ) -> List[CarbonIntensityResponse]:
-        """Get historical carbon intensity data for a location and time range."""
+    def get_historical(
+        self, region: str, start_time: datetime, end_time: datetime) -> List[dict]:
+        """Get historical carbon intensity data for a region and time range."""

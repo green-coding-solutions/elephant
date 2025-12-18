@@ -1,233 +1,166 @@
-"""Tests for the main FastAPI application."""
+"""Tests for FastAPI application endpoints."""
 
 import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import patch, AsyncMock
-from typing import Any
+from fastapi import HTTPException
 
-from elephant.app import app
-from elephant.models import CarbonIntensityResponse
-from datetime import datetime
+from elephant import app as app_module
+from elephant.app import (
+    get_primary_carbon_intensity,
+    get_current_carbon_intensity,
+    get_carbon_intensity_history,
+    list_regions,
+    health_check,
+    index,
+)
+from elephant.config import Config, CronConfig, DatabaseConfig, LoggingConfig, ProviderConfig, Source
 
 
-@pytest.fixture(name="test_client")
-def fixture_test_client() -> TestClient:
-    """Test client for the FastAPI app."""
-    return TestClient(app)
-
-
-@pytest.fixture(name="mock_carbon_provider")
-def fixture_mock_carbon_provider() -> AsyncMock:
-    """Mock provider for testing."""
-    provider = AsyncMock()
-    provider.get_current.return_value = CarbonIntensityResponse(
-        location="DE", time=datetime.fromisoformat("2025-09-22T10:45:00+00:00"), carbon_intensity=241.0
+def _make_config(primary_provider: str = "electricitymaps") -> Config:
+    """Helper to build a minimal Config for tests."""
+    return Config(
+        database=DatabaseConfig(url="postgresql://user:pass@localhost:5432/elephant"),
+        providers={
+            "electricitymaps": ProviderConfig(enabled=True),
+            "bundesnetzagentur": ProviderConfig(enabled=True),
+        },
+        cron=CronConfig(
+            interval_seconds=300,
+            sources=[
+                Source(region="DE", provider=primary_provider, primary=True),
+                Source(region="DE", provider="bundesnetzagentur", primary=False),
+            ],
+        ),
+        logging=LoggingConfig(level="INFO"),
     )
-    provider.get_historical.return_value = [
-        CarbonIntensityResponse(
-            location="DE", time=datetime.fromisoformat("2025-09-22T10:00:00+00:00"), carbon_intensity=241.0
-        ),
-        CarbonIntensityResponse(
-            location="DE", time=datetime.fromisoformat("2025-09-22T11:00:00+00:00"), carbon_intensity=235.0
-        ),
-    ]
-    return provider
 
 
-class TestCarbonIntensityEndpoint:
-    """Tests for the current carbon intensity endpoint."""
-
-    def test_health_check(self, test_client: TestClient) -> None:
-        """Test health check endpoint."""
-        response = test_client.get("/health")
-        assert response.status_code == 200
-        data = response.json()
-        assert "status" in data
-        assert "providers" in data
-
-    @patch("elephant.app.carbon_providers")
-    def test_get_current_success(
-        self, mock_providers: Any, test_client: TestClient, mock_carbon_provider: AsyncMock
-    ) -> None:
-        """Test successful current carbon intensity request."""
-        mock_providers.__getitem__.return_value = mock_carbon_provider
-        mock_providers.__contains__.return_value = True
-
-        response = test_client.get("/carbon-intensity/current?location=DE")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["location"] == "DE"
-        assert data["carbon_intensity"] == 241.0
-        assert "time" in data
-
-    def test_missing_location_parameter(self, test_client: TestClient) -> None:
-        """Test request without location parameter."""
-        response = test_client.get("/carbon-intensity/current")
-
-        assert response.status_code == 422  # FastAPI validation error
-
-    def test_invalid_location_format(self, test_client: TestClient) -> None:
-        """Test request with invalid location format."""
-        response = test_client.get("/carbon-intensity/current?location=INVALID")
-
-        assert response.status_code == 400
-        assert "country code" in response.json()["detail"]
-
-    def test_single_character_location(self, test_client: TestClient) -> None:
-        """Test request with single character location."""
-        response = test_client.get("/carbon-intensity/current?location=D")
-
-        assert response.status_code == 400
-        assert "country code" in response.json()["detail"]
-
-    def test_numeric_location(self, test_client: TestClient) -> None:
-        """Test request with numeric location."""
-        response = test_client.get("/carbon-intensity/current?location=12")
-
-        assert response.status_code == 400
-        assert "country code" in response.json()["detail"]
-
-    @patch("elephant.app.carbon_providers")
-    def test_no_providers_available(self, mock_providers: Any, test_client: TestClient) -> None:
-        """Test when no providers are available."""
-        mock_providers.__contains__.return_value = False
-
-        response = test_client.get("/carbon-intensity/current?location=DE")
-
-        assert response.status_code == 503
-        assert "No carbon intensity providers available" in response.json()["detail"]
-        assert "simulation endpoints" in response.json()["detail"]
+@pytest.mark.asyncio
+async def test_index_returns_html() -> None:
+    """Index endpoint returns HTML content."""
+    response = await index()
+    assert response.status_code == 200
+    assert response.media_type == "text/html"
+    assert b"<html" in response.body.lower()
 
 
-class TestCarbonIntensityHistoryEndpoint:
-    """Tests for the carbon intensity history endpoint."""
+@pytest.mark.asyncio
+async def test_list_regions(monkeypatch) -> None:
+    """Regions endpoint returns DB regions."""
+    monkeypatch.setattr(app_module, "fetch_regions", lambda db: ["DE", "FR"])
+    regions = await list_regions(db=object())
+    assert regions == ["DE", "FR"]
 
-    @patch("elephant.app.carbon_providers")
-    def test_get_history_success(
-        self, mock_providers: Any, test_client: TestClient, mock_carbon_provider: AsyncMock
-    ) -> None:
-        """Test successful historical carbon intensity request."""
-        mock_providers.__getitem__.return_value = mock_carbon_provider
-        mock_providers.__contains__.return_value = True
 
-        response = test_client.get(
-            "/carbon-intensity/history?location=DE&startTime=2025-09-22T10:00:00Z&endTime=2025-09-22T12:00:00Z"
-        )
+@pytest.mark.asyncio
+async def test_get_current_carbon_intensity_success(monkeypatch) -> None:
+    """Current endpoint returns latest data."""
+    monkeypatch.setattr(app_module, "fetch_latest", lambda db, region: {"provider": {"carbon_intensity": 123}})
+    result = await get_current_carbon_intensity(region="DE", update=False, db=object())
+    assert result["provider"]["carbon_intensity"] == 123
 
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data) == 2
-        assert data[0]["location"] == "DE"
-        assert data[0]["carbon_intensity"] == 241.0
-        assert data[1]["location"] == "DE"
-        assert data[1]["carbon_intensity"] == 235.0
-        assert "time" in data[0]
-        assert "time" in data[1]
 
-    def test_missing_location_parameter(self, test_client: TestClient) -> None:
-        """Test request without location parameter."""
-        response = test_client.get(
-            "/carbon-intensity/history?startTime=2025-09-22T10:00:00Z&endTime=2025-09-22T12:00:00Z"
-        )
+@pytest.mark.asyncio
+async def test_get_current_carbon_intensity_triggers_update(monkeypatch) -> None:
+    """Current endpoint triggers cron when update=True."""
+    called = {}
 
-        assert response.status_code == 422  # FastAPI validation error
+    async def fake_run_in_threadpool(func, region=None):
+        called["region"] = region
+        return None
 
-    def test_missing_start_time_parameter(self, test_client: TestClient) -> None:
-        """Test request without startTime parameter."""
-        response = test_client.get("/carbon-intensity/history?location=DE&endTime=2025-09-22T12:00:00Z")
+    monkeypatch.setattr(app_module, "run_in_threadpool", fake_run_in_threadpool)
+    monkeypatch.setattr(app_module, "fetch_latest", lambda db, region: {"provider": {"carbon_intensity": 1}})
 
-        assert response.status_code == 422  # FastAPI validation error
+    await get_current_carbon_intensity(region="FR", update=True, db=object())
+    assert called["region"] == "FR"
 
-    def test_missing_end_time_parameter(self, test_client: TestClient) -> None:
-        """Test request without endTime parameter."""
-        response = test_client.get("/carbon-intensity/history?location=DE&startTime=2025-09-22T10:00:00Z")
 
-        assert response.status_code == 422  # FastAPI validation error
+@pytest.mark.asyncio
+async def test_get_current_carbon_intensity_not_found(monkeypatch) -> None:
+    """Current endpoint raises 404 when no data."""
+    monkeypatch.setattr(app_module, "fetch_latest", lambda db, region: {})
+    with pytest.raises(HTTPException) as exc:
+        await get_current_carbon_intensity(region="DE", update=False, db=object())
+    assert exc.value.status_code == 404
 
-    def test_invalid_location_format(self, test_client: TestClient) -> None:
-        """Test request with invalid location format."""
-        response = test_client.get(
-            "/carbon-intensity/history?location=INVALID&startTime=2025-09-22T10:00:00Z&endTime=2025-09-22T12:00:00Z"
-        )
 
-        assert response.status_code == 400
-        assert "country code" in response.json()["detail"]
+@pytest.mark.asyncio
+async def test_get_primary_carbon_intensity_returns_primary(monkeypatch) -> None:
+    """Primary endpoint returns only the configured primary provider entry."""
+    app_module.config = _make_config(primary_provider="electricitymaps")
 
-    def test_invalid_start_time_format(self, test_client: TestClient) -> None:
-        """Test request with invalid startTime format."""
-        response = test_client.get(
-            "/carbon-intensity/history?location=DE&startTime=invalid-date&endTime=2025-09-22T12:00:00Z"
-        )
+    # Stub fetch_latest to simulate DB results
+    monkeypatch.setattr(
+        app_module,
+        "fetch_latest",
+        lambda db, region: {
+            "electricitymaps_de": {"time": "t1", "carbon_intensity": 111},
+            "bundesnetzagentur": {"time": "t2", "carbon_intensity": 222},
+        },
+    )
 
-        assert response.status_code == 400
-        assert "Invalid datetime format" in response.json()["detail"]
+    result = await get_primary_carbon_intensity(region="DE", update=False, db=object())
+    assert list(result.keys()) == ["electricitymaps_de"]
+    assert result["electricitymaps_de"]["carbon_intensity"] == 111
 
-    def test_invalid_end_time_format(self, test_client: TestClient) -> None:
-        """Test request with invalid endTime format."""
-        response = test_client.get(
-            "/carbon-intensity/history?location=DE&startTime=2025-09-22T10:00:00Z&endTime=invalid-date"
-        )
 
-        assert response.status_code == 400
-        assert "Invalid datetime format" in response.json()["detail"]
+@pytest.mark.asyncio
+async def test_get_primary_carbon_intensity_missing_primary_data(monkeypatch) -> None:
+    """Primary endpoint raises 404 when primary provider has no data."""
+    app_module.config = _make_config(primary_provider="electricitymaps")
 
-    def test_start_time_after_end_time(self, test_client: TestClient) -> None:
-        """Test request where startTime is after endTime."""
-        response = test_client.get(
-            "/carbon-intensity/history?location=DE&startTime=2025-09-22T12:00:00Z&endTime=2025-09-22T10:00:00Z"
-        )
+    monkeypatch.setattr(
+        app_module,
+        "fetch_latest",
+        lambda db, region: {
+            "bundesnetzagentur": {"time": "t2", "carbon_intensity": 222},
+        },
+    )
 
-        assert response.status_code == 400
-        assert "startTime must be before endTime" in response.json()["detail"]
+    with pytest.raises(HTTPException) as exc:
+        await get_primary_carbon_intensity(region="DE", update=False, db=object())
 
-    def test_start_time_equals_end_time(self, test_client: TestClient) -> None:
-        """Test request where startTime equals endTime."""
-        response = test_client.get(
-            "/carbon-intensity/history?location=DE&startTime=2025-09-22T10:00:00Z&endTime=2025-09-22T10:00:00Z"
-        )
+    assert exc.value.status_code == 404
+    assert "primary provider" in str(exc.value.detail).lower()
 
-        assert response.status_code == 400
-        assert "startTime must be before endTime" in response.json()["detail"]
 
-    @patch("elephant.app.carbon_providers")
-    def test_no_providers_available(self, mock_providers: Any, test_client: TestClient) -> None:
-        """Test when no providers are available."""
-        mock_providers.__contains__.return_value = False
+@pytest.mark.asyncio
+async def test_get_carbon_intensity_history(monkeypatch) -> None:
+    """History endpoint returns windowed data."""
+    sample = [{"time": "t1"}, {"time": "t2"}]
+    monkeypatch.setattr(app_module, "fetch_between", lambda db, region, start, end: sample)
+    result = await get_carbon_intensity_history(
+        region="DE", startTime="2025-09-22T10:00:00Z", endTime="2025-09-22T12:00:00Z", db=object()
+    )
+    assert result == sample
 
-        response = test_client.get(
-            "/carbon-intensity/history?location=DE&startTime=2025-09-22T10:00:00Z&endTime=2025-09-22T12:00:00Z"
-        )
 
-        assert response.status_code == 503
-        assert "No carbon intensity providers available" in response.json()["detail"]
-        assert "simulation endpoints" in response.json()["detail"]
+@pytest.mark.asyncio
+async def test_health_check(monkeypatch) -> None:
+    """Health endpoint reports providers and record count."""
+    monkeypatch.setattr(app_module, "get_providers", lambda: {"p1": object(), "p2": object()})
 
-    def test_datetime_with_plus_timezone(self, test_client: TestClient) -> None:
-        """Test that datetime with +00:00 timezone works."""
-        with patch("elephant.app.carbon_providers") as mock_providers:
-            mock_provider = AsyncMock()
-            mock_provider.get_historical.return_value = []
-            mock_providers.__getitem__.return_value = mock_provider
-            mock_providers.__contains__.return_value = True
+    class DummyCursor:
+        def __enter__(self):
+            return self
 
-            # URL encode the + character as %2B
-            response = test_client.get(
-                "/carbon-intensity/history?location=DE&startTime=2025-09-22T10:00:00%2B00:00&endTime=2025-09-22T12:00:00%2B00:00"
-            )
+        def __exit__(self, exc_type, exc, tb):
+            return False
 
-            assert response.status_code == 200
+        def execute(self, *_args, **_kwargs):
+            return None
 
-    def test_datetime_without_timezone(self, test_client: TestClient) -> None:
-        """Test that datetime without timezone works."""
-        with patch("elephant.app.carbon_providers") as mock_providers:
-            mock_provider = AsyncMock()
-            mock_provider.get_historical.return_value = []
-            mock_providers.__getitem__.return_value = mock_provider
-            mock_providers.__contains__.return_value = True
+        def fetchone(self):
+            return (5,)
 
-            response = test_client.get(
-                "/carbon-intensity/history?location=DE&startTime=2025-09-22T10:00:00&endTime=2025-09-22T12:00:00"
-            )
+        def fetchall(self):
+            return [{"region": "DE"}, {"region": "FR"}]
 
-            assert response.status_code == 200
+    class DummyDB:
+        def cursor(self, *args, **kwargs):
+            return DummyCursor()
+
+    result = await health_check(db=DummyDB())
+    assert result["providers"] == ["p1", "p2"]
+    assert result["db_records"] == 5
+    assert result["regions"] == ["DE", "FR"]

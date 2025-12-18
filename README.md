@@ -1,8 +1,8 @@
-# Elephant
+# Elephant 🐘
 
-**Elephant** is a specialized dockerized Carbon Grid Intensity (CGI) service focused on **simulation capabilities** for carbon intensity scenarios. While it can provide current and historical carbon intensity data from multiple providers, its primary differentiator is the advanced simulation functionality for testing and modeling carbon-aware computing scenarios.
+**Elephant** is a specialized Carbon Grid Intensity (CGI) service. It provides current and historical carbon intensity data from multiple providers.
 
-Its main purpose is the integration into the Green Metrics Tool (GMT) to provide dynamic carbon intensity values with powerful simulation features. Elephant enables users of GMT to create, store, and replay custom carbon intensity scenarios for testing and development.
+Its main purpose is the integration into the Green Metrics Tool (GMT) to provide dynamic carbon intensity values.
 
 ## Installation
 
@@ -30,82 +30,39 @@ cp config.example.yml config.yml
 # For ElectricityMaps: Replace "your-electricitymaps-api-token-here" with your actual token
 ```
 
+## Running
+
+You should just be able to do
+```bash
+docker compose up --build
+```
+
+and that should set everythin up so that you can access Elephant under `http://localhost:8000/`
+
 **Required for ElectricityMaps:**
 
 - Sign up at [ElectricityMaps](https://portal.electricitymaps.com/) to get an API token
 - Enable the `electricitymaps` provider and add your token in `config.yml`
 
-**Simulation-only mode:**
+## Development
+You should be able to
 
-- Disable all external providers to run Elephant with simulation capabilities only
-- Useful for testing and development without requiring external API tokens
-
-## Quick Start
-
-### Local Development
-
-```bash
-# Activate virtual environment
-source venv/bin/activate
-
-# Start the server (debug mode)
-python3 -m elephant --debug
-
-# Or start on custom port
-python3 -m elephant --port 8080
+```
+pip install -r requirements-dev.txt
+pylint elephant/**.py
+pytest tests
 ```
 
-### Docker Deployment
+Also for development it might be easier to not having to build a docker container all the time. So you can only run the DB with
 
 ```bash
-# Build the Docker image
-docker build -t elephant .
-
-# Run with configuration file (mount config.yml from current directory)
-docker run -p 8000:8000 -v $(pwd)/config.yml:/app/config.yml --name elephant elephant
+docker compose up -d db
 ```
 
-## API Usage
-
-### Current Carbon Intensity
+and then run the commands on your development machine
 
 ```bash
-# Get current carbon intensity for Germany
-curl "http://localhost:8000/carbon-intensity/current?location=DE"
+python3 -m elephant.database
+python3 -m elephant.cron
+python3 -m elephant --host 0.0.0.0 --port 8000
 ```
-
-### Historical Carbon Intensity
-
-```bash
-# Get historical data for Germany from 10:00 to 12:00 UTC
-curl "http://localhost:8000/carbon-intensity/history?location=DE&startTime=2025-09-22T10:00:00Z&endTime=2025-09-22T12:00:00Z"
-
-# Get data with interpolation support (includes bracketing data points for time ranges between hourly measurements)
-curl "http://localhost:8000/carbon-intensity/history?location=DE&startTime=2025-09-22T10:15:00Z&endTime=2025-09-22T10:45:00Z&interpolate=true"
-```
-
-**Parameters:**
-
-- `location`: ISO 3166-1 alpha-2 country code (e.g., 'DE', 'US', 'FR')
-- `startTime`: Start time in ISO 8601 format (e.g., '2025-09-22T10:00:00Z')
-- `endTime`: End time in ISO 8601 format (e.g., '2025-09-22T12:00:00Z')
-- `interpolate` (optional): When `true`, includes data points that bracket the requested time range, useful for interpolation between hourly measurements. Default: `false`
-
-### Health Check
-
-```bash
-# Check service status and available providers
-curl "http://localhost:8000/health"
-```
-
-### API Documentation
-
-Once running, visit `http://localhost:8000/docs` for interactive API documentation.
-
-## Contributing
-
-For development setup, contribution guidelines, and information about running tests and code quality checks, please see [CONTRIBUTING.md](./CONTRIBUTING.md).
-
-## Requirements and Design
-
-See the complete [SPECIFICATION.md](./SPECIFICATION.md) for detailed requirements and implementation constraints.

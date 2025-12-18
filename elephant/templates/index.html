@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Elephant Carbon Dashboard</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.2/dist/semantic.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/fomantic-ui@2.9.2/dist/semantic.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        body { padding: 2rem; }
+        #chart-container { position: relative; height: 60vh; }
+    </style>
+</head>
+<body>
+    <div class="ui container">
+        <h2 class="ui header">🐘 Elephant - Carbon Intensity Dashboard</h2>
+        <form class="ui form" id="controls">
+            <div class="fields">
+                <div class="four wide field">
+                    <label>Region (ISO code)</label>
+                    <select class="ui dropdown" id="regionDropdown"></select>
+                </div>
+                <div class="six wide field">
+                    <label>Start time</label>
+                    <input type="datetime-local" id="startTime" />
+                </div>
+                <div class="six wide field">
+                    <label>End time</label>
+                    <input type="datetime-local" id="endTime" />
+                </div>
+            </div>
+            <button class="ui primary button" type="submit">Load data</button>
+            <div class="ui inline loader" id="loader" style="display:none;"></div>
+        </form>
+        <div id="chart-container" class="ui segment">
+            <canvas id="chart"></canvas>
+        </div>
+        <div class="ui message" id="status" style="display:none;"></div>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById("status");
+        const loaderEl = document.getElementById("loader");
+        const regionSelect = document.getElementById("regionDropdown");
+        const ctx = document.getElementById("chart").getContext("2d");
+        let chart;
+
+        function setDefaults() {
+            const end = new Date();
+            const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+            document.getElementById("startTime").value = start.toISOString().slice(0,16);
+            document.getElementById("endTime").value = end.toISOString().slice(0,16);
+        }
+
+        function showStatus(message, type = "info") {
+            statusEl.className = `ui ${type} message`;
+            statusEl.textContent = message;
+            statusEl.style.display = "block";
+        }
+
+        function clearStatus() {
+            statusEl.style.display = "none";
+        }
+
+        function toggleLoading(show) {
+            loaderEl.style.display = show ? "inline-block" : "none";
+        }
+
+        async function fetchRegions() {
+            const response = await fetch("/regions");
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || "Failed to fetch regions");
+            }
+            return response.json();
+        }
+
+        async function initRegions() {
+            const regions = await fetchRegions();
+            if (!regions || regions.length === 0) {
+                showStatus("No regions available. Run the cron to load data first.", "warning");
+                return null;
+            }
+            regionSelect.innerHTML = regions.map((r) => `<option value="${r}">${r}</option>`).join("");
+            $(regionSelect).dropdown("clear");
+            $(regionSelect).dropdown("set selected", regions[0]);
+            return regions[0];
+        }
+
+        function buildDatasets(rows) {
+            const colors = [
+                "#2185d0", "#21ba45", "#f2711c", "#a333c8", "#db2828", "#00b5ad", "#767676"
+            ];
+            const grouped = {};
+            rows.forEach((row) => {
+                const provider = row.provider || "unknown";
+                if (!grouped[provider]) grouped[provider] = [];
+                grouped[provider].push({ x: new Date(row.time), y: row.carbon_intensity });
+            });
+
+            return Object.entries(grouped).map(([provider, points], idx) => ({
+                label: provider,
+                data: points,
+                borderColor: colors[idx % colors.length],
+                backgroundColor: colors[idx % colors.length],
+                fill: false,
+                tension: 0.2,
+            }));
+        }
+
+        function renderChart(rows) {
+            const datasets = buildDatasets(rows);
+            if (chart) {
+                chart.data.datasets = datasets;
+                chart.update();
+                return;
+            }
+            chart = new Chart(ctx, {
+                type: "line",
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: "bottom" },
+                        title: { display: false },
+                    },
+                    scales: {
+                        x: {
+                            type: "time",
+                            time: { tooltipFormat: "yyyy-MM-dd HH:mm" },
+                            title: { display: true, text: "Time" },
+                        },
+                        y: {
+                            title: { display: true, text: "gCO2e / kWh" },
+                            beginAtZero: true,
+                        },
+                    },
+                },
+            });
+        }
+
+        async function fetchData(region, start, end) {
+            const params = new URLSearchParams({
+                region,
+                startTime: new Date(start).toISOString(),
+                endTime: new Date(end).toISOString(),
+            });
+            const response = await fetch(`/carbon-intensity/history?${params.toString()}`);
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text || "Failed to fetch data");
+            }
+            return response.json();
+        }
+
+        async function loadData(evt) {
+            if (evt) {
+                evt.preventDefault();
+            }
+            clearStatus();
+            toggleLoading(true);
+            try {
+                const region = (regionSelect.value || "").trim().toUpperCase();
+                const start = document.getElementById("startTime").value;
+                const end = document.getElementById("endTime").value;
+                if (!region || region.length !== 2) {
+                    showStatus("Please provide a two-letter region code (e.g., DE, US).", "warning");
+                    toggleLoading(false);
+                    return;
+                }
+                const data = await fetchData(region, start, end);
+                if (!data || data.length === 0) {
+                    showStatus("No data found for the selected range.", "info");
+                } else {
+                    renderChart(data);
+                }
+            } catch (err) {
+                showStatus(err.message || "Error loading data.", "negative");
+            } finally {
+                toggleLoading(false);
+            }
+        }
+
+        document.getElementById("controls").addEventListener("submit", loadData);
+
+        async function init() {
+            try {
+                setDefaults();
+                const firstRegion = await initRegions();
+                if (!firstRegion) {
+                    return;
+                }
+                await loadData();
+            } catch (err) {
+                showStatus(err.message || "Failed to initialize page.", "negative");
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

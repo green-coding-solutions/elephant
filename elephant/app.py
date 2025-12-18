@@ -1,26 +1,50 @@
 """Main FastAPI application for Elephant service."""
 
 import logging
-import inspect
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional, Any, AsyncGenerator, Dict, List
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse, HTMLResponse
+from psycopg import Connection
 
-from .config import load_config, Config
-from .models import CarbonIntensityResponse
-from .providers.base import CarbonIntensityProvider
-from .providers.electricitymaps import ElectricityMapsProvider
-from . import __version__
+from elephant.config import load_config, Config
+from elephant.database import connection_dependency, fetch_between, fetch_latest, fetch_regions
+from elephant.cron import run_cron
+from elephant.providers.helpers import get_providers
+
 
 
 logger = logging.getLogger(__name__)
+INDEX_HTML = (Path(__file__).resolve().parent / "templates" / "index.html").read_text(encoding="utf-8")
 
 # Global configuration and providers
 config: Optional[Config] = None
-carbon_providers: Dict[str, CarbonIntensityProvider] = {}
+
+
+def _get_primary_source(region: str) -> str:
+    """Return the configured primary provider name for a region (from cron sources)."""
+
+    if not config:
+        raise HTTPException(status_code=500, detail="Configuration not loaded")
+
+    region_upper = region.upper()
+
+    primary_sources = [
+        source.provider
+        for source in config.cron.sources
+        if source.region.upper() == region_upper and getattr(source, "primary", False)
+    ]
+
+    if not primary_sources:
+        raise HTTPException(status_code=400, detail=f"No primary provider configured for region '{region_upper}'")
+    if len(primary_sources) > 1:
+        logger.warning("Multiple primary providers configured for %s; using '%s'", region_upper, primary_sources[0])
+
+    return primary_sources[0].lower()
 
 
 @asynccontextmanager
@@ -36,15 +60,6 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
         logging.basicConfig(level=getattr(logging, log_level))
         logger.info("Starting %s", fastapi_app.title)
 
-        # Initialize providers
-        electricitymaps_config = config.providers.get("electricitymaps")  # pylint: disable=no-member
-        if electricitymaps_config and electricitymaps_config.enabled:
-            carbon_providers["electricitymaps"] = ElectricityMapsProvider(electricitymaps_config)
-            logger.info("ElectricityMaps provider initialized")
-
-        if not carbon_providers:
-            logger.info("No external providers configured - simulation-only mode")
-
         logger.info("Application startup complete")
         yield
 
@@ -53,21 +68,13 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
         raise
 
     finally:
-        # Cleanup providers
-        for provider in carbon_providers.values():
-            close_method = getattr(provider, "close", None)
-            if close_method and callable(close_method):
-                if inspect.iscoroutinefunction(close_method):
-                    await close_method()
-                else:
-                    close_method()
         logger.info("Application shutdown complete")
 
 
 app = FastAPI(
     title="Elephant Carbon Grid Intensity Service",
-    description="Specialized dockerized Carbon Grid Intensity (CGI) service with simulation capabilities",
-    version=__version__,
+    description="Specialized Carbon Grid Intensity (CGI) service",
+    version="0.1",
     lifespan=lifespan,
 )
 
@@ -78,48 +85,92 @@ async def value_error_handler(_: Any, exc: ValueError) -> JSONResponse:
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
-@app.get("/carbon-intensity/current", response_model=CarbonIntensityResponse)
+@app.get("/", response_class=HTMLResponse)
+async def index() -> HTMLResponse:
+    """Serve a simple dashboard for viewing carbon intensity data."""
+    return HTMLResponse(INDEX_HTML)
+
+
+
+@app.get("/regions")
+async def list_regions(db: Connection = Depends(connection_dependency)) -> list[str]:
+    """Return all regions with stored data."""
+    return fetch_regions(db)
+
+
+@app.get("/carbon-intensity/current")
 async def get_current_carbon_intensity(
-    location: str = Query(..., description="Country code (e.g., 'DE', 'US', 'FR')")
-) -> CarbonIntensityResponse:
-    """Get current carbon grid intensity for a location."""
-    if not location:
-        raise HTTPException(status_code=400, detail="Location parameter is required")
+    region: str = Query(..., description="Country code (e.g., 'DE', 'US', 'FR')"),
+    update: bool = Query(False, description="If true, fetch fresh data before returning results"),
+    db: Connection = Depends(connection_dependency)) -> Dict[str, Any]:
+    """Get current carbon grid intensity for a region."""
+    if not region:
+        raise HTTPException(status_code=400, detail="region parameter is required")
 
-    # Validate location format (ISO 3166-1 alpha-2)
-    if len(location) != 2 or not location.isalpha():
+    # Validate region format (ISO 3166-1 alpha-2)
+    if len(region) != 2 or not region.isalpha():
         raise HTTPException(
-            status_code=400, detail="Location must be a valid ISO 3166-1 alpha-2 country code (e.g., 'DE', 'US')"
-        )
+            status_code=400, detail="region must be a valid ISO 3166-1 alpha-2 country code (e.g., 'DE', 'US')"
+    )
 
-    location = location.upper()
+    region = region.upper()
 
-    # Try ElectricityMaps provider first
-    if "electricitymaps" in carbon_providers:
-        try:
-            return await carbon_providers["electricitymaps"].get_current(location)
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error("Unexpected error from ElectricityMaps provider: %s", e)
-            raise HTTPException(status_code=503, detail="Carbon intensity service temporarily unavailable") from e
+    if update:
+        await run_in_threadpool(run_cron, region=region)
+
+    # Query the database for the most recent entry
+    results = fetch_latest(db, region)
+
+    if results:
+        return results
 
     raise HTTPException(
-        status_code=503,
-        detail="No carbon intensity providers available. Use simulation endpoints for testing scenarios.",
+        status_code=404,
+        detail="No carbon intensity data available for this region. Please check back later.",
     )
 
 
-@app.get("/carbon-intensity/history", response_model=List[CarbonIntensityResponse])
+@app.get("/carbon-intensity/current/primary")
+async def get_primary_carbon_intensity(
+    region: str = Query(..., description="Country code (e.g., 'DE', 'US', 'FR')"),
+    update: bool = Query(False, description="If true, fetch fresh data before returning results"),
+    db: Connection = Depends(connection_dependency),
+) -> Dict[str, Any]:
+    """Get current carbon grid intensity for the configured primary provider for the region."""
+
+
+    results = await get_current_carbon_intensity(region=region, update=update, db=db)
+
+    primary_source = _get_primary_source(region)
+
+    matched_key = next(
+        (
+            key
+            for key in results.keys()
+            if key.lower() == primary_source or key.lower().startswith(f"{primary_source}_")
+        ),
+        None,
+    )
+
+    if not matched_key:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No carbon intensity data available for primary provider '{primary_source}' in this region.",
+        )
+
+    return {matched_key: results[matched_key]}
+
+
+@app.get("/carbon-intensity/history")
 async def get_carbon_intensity_history(
-    location: str = Query(..., description="Country code (e.g., 'DE', 'US', 'FR')"),
+    region: str = Query(..., description="Country code (e.g., 'DE', 'US', 'FR')"),
     startTime: str = Query(..., description="Start time in ISO 8601 format (e.g., '2025-09-22T10:00:00Z')"),
     endTime: str = Query(..., description="End time in ISO 8601 format (e.g., '2025-09-22T12:00:00Z')"),
-    interpolate: bool = Query(False, description="Include data points that bracket the time range for interpolation"),
-) -> List[CarbonIntensityResponse]:
-    """Get historical carbon grid intensity for a location and time range."""
-    if not location:
-        raise HTTPException(status_code=400, detail="Location parameter is required")
+    db: Connection = Depends(connection_dependency)
+) -> List[dict]:
+    """Get historical carbon grid intensity for a region and time range."""
+    if not region:
+        raise HTTPException(status_code=400, detail="region parameter is required")
 
     if not startTime:
         raise HTTPException(status_code=400, detail="startTime parameter is required")
@@ -127,13 +178,13 @@ async def get_carbon_intensity_history(
     if not endTime:
         raise HTTPException(status_code=400, detail="endTime parameter is required")
 
-    # Validate location format (ISO 3166-1 alpha-2)
-    if len(location) != 2 or not location.isalpha():
+    # Validate region format (ISO 3166-1 alpha-2)
+    if len(region) != 2 or not region.isalpha():
         raise HTTPException(
-            status_code=400, detail="Location must be a valid ISO 3166-1 alpha-2 country code (e.g., 'DE', 'US')"
+            status_code=400, detail="region must be a valid ISO 3166-1 alpha-2 country code (e.g., 'DE', 'US')"
         )
 
-    location = location.upper()
+    region = region.upper()
 
     # Parse datetime strings
     try:
@@ -149,23 +200,26 @@ async def get_carbon_intensity_history(
     if start_dt >= end_dt:
         raise HTTPException(status_code=400, detail="startTime must be before endTime")
 
-    # Try ElectricityMaps provider first
-    if "electricitymaps" in carbon_providers:
-        try:
-            return await carbon_providers["electricitymaps"].get_historical(location, start_dt, end_dt, interpolate)
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error("Unexpected error from ElectricityMaps provider: %s", e)
-            raise HTTPException(status_code=503, detail="Carbon intensity service temporarily unavailable") from e
+    # Query the database
+    results = fetch_between(db, region, start_dt, end_dt)
 
-    raise HTTPException(
-        status_code=503,
-        detail="No carbon intensity providers available. Use simulation endpoints for testing scenarios.",
-    )
+    return results or []
 
 
+#pylint: disable=broad-exception-caught
 @app.get("/health")
-async def health_check() -> dict:
+async def health_check(db: Connection = Depends(connection_dependency)) -> dict:
     """Health check endpoint."""
-    return {"status": "healthy", "providers": list(carbon_providers.keys())}
+    providers = list(get_providers().keys())
+
+    record_count = None
+    try:
+        with db.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM carbon;")
+            row = cur.fetchone()
+            record_count = row[0] if row else 0
+    except Exception as exc:
+        logger.warning("Health check database count failed: %s", exc)
+        return {"status": "error", "details": "database query failed"}
+
+    return {"status": "healthy", "providers": providers, "db_records": record_count, "regions": fetch_regions(db)}
