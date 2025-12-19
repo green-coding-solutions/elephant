@@ -5,6 +5,7 @@ from .base import CarbonIntensityProvider
 from .electricitymaps import ElectricityMapsProvider
 from .bundesnetzagentur import BundesnetzagenturProvider
 from .bundesnetzagentur_all import BundesnetzagenturProvider as BundesnetzagenturAllProvider
+from .energycharts import EnergyChartsProvider
 from ..config import config
 
 logging.basicConfig(level=config.logging.level)
@@ -19,6 +20,10 @@ def get_providers() -> dict[str, CarbonIntensityProvider]:
     if config.providers.get("electricitymaps") and config.providers["electricitymaps"].enabled:
         providers["electricitymaps"] = ElectricityMapsProvider(config.providers["electricitymaps"])
         logger.debug("ElectricityMaps provider initialized")
+
+    if config.providers.get("energycharts") and config.providers["energycharts"].enabled:
+        providers["energycharts"] = EnergyChartsProvider(config.providers["energycharts"])
+        logger.debug("EnergyCharts provider initialized")
 
     if config.providers.get("bundesnetzagentur") and config.providers["bundesnetzagentur"].enabled:
         providers["bundesnetzagentur"] = BundesnetzagenturProvider(config.providers["bundesnetzagentur"])

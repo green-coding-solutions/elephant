@@ -10,6 +10,8 @@ providers:
   electricitymaps:
     enabled: false
     api_token: "YOUR TOKEN HERE"
+  energycharts:
+    enabled: true
   bundesnetzagentur:
     enabled: true
 
@@ -22,6 +24,8 @@ cron:
     - region: "DE"
       provider: "electricitymaps"
       primary: true
+    - region: "DE"
+      provider: "energycharts"
     - region: "FR"
       provider: "electricitymaps"
 
