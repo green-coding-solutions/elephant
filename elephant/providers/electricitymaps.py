@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import List, NoReturn
+from typing import List
 
 import requests
 from fastapi import HTTPException
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.electricitymaps.com"
 PROVIDER_NAME = "electricitymaps"
-
+RESOLUTION = "5_minutes"
 
 class ElectricityMapsProvider(CarbonIntensityProvider):
     """Provider for ElectricityMaps carbon intensity data."""
@@ -35,11 +35,12 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
 
         except (HTTPError, RequestException) as exc:
             logger.error("ElectricityMaps request error: %s", exc)
-            raise HTTPException(status_code=503, detail="ElectricityMaps service temporarily unavailable")
+            raise HTTPException(status_code=503, detail="ElectricityMaps service temporarily unavailable") from exc
 
     def get_current(self, region: str) -> List[dict]:
         """Get current carbon intensity for a region."""
-        response = self._get("/v3/carbon-intensity/latest", params={"zone": region})
+        response = self._get("/v3/carbon-intensity/latest",
+                              params={"zone": region, "temporalGranularity": RESOLUTION})
         data = response.json()
         item_time = datetime.fromisoformat(data["datetime"].replace("Z", "+00:00"))
         return [
@@ -48,6 +49,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                 "time": item_time,
                 "carbon_intensity": data["carbonIntensity"],
                 "provider": PROVIDER_NAME,
+                "resolution": RESOLUTION,
             }
         ]
 
@@ -64,7 +66,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                 "zone": region,
                 "start": start_time.isoformat(),
                 "end": end_time.isoformat(),
-                "temporalGranularity": "5_minutes",
+                "temporalGranularity": RESOLUTION,
             },
         )
 
@@ -79,6 +81,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                     "time": item_time,
                     "carbon_intensity": item["carbonIntensity"],
                     "provider": PROVIDER_NAME,
+                    "resolution": RESOLUTION,
                 }
             )
 

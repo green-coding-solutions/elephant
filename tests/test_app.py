@@ -1,5 +1,7 @@
 """Tests for FastAPI application endpoints."""
 
+from datetime import datetime, timezone, timedelta
+
 import pytest
 from fastapi import HTTPException
 
@@ -7,6 +9,8 @@ from elephant import app as app_module
 from elephant.app import (
     get_primary_carbon_intensity,
     get_current_carbon_intensity,
+    get_v3_carbon_intensity_current,
+    get_v3_carbon_intensity_history,
     get_carbon_intensity_history,
     list_regions,
     health_check,
@@ -76,6 +80,63 @@ async def test_get_current_carbon_intensity_triggers_update(monkeypatch) -> None
 
 
 @pytest.mark.asyncio
+async def test_get_current_carbon_intensity_uses_simulation_when_provided(monkeypatch) -> None:
+    """Current endpoint returns simulation response when simulation_id is supplied."""
+    captured = {}
+
+    async def fake_get_simulation_carbon(simulation_id, db):
+        captured["simulation_id"] = simulation_id
+        captured["db"] = db
+        return {"simulation_id": simulation_id, "carbon_intensity": 42.0}
+
+    monkeypatch.setattr(app_module, "get_simulation_carbon", fake_get_simulation_carbon)
+
+    result = await get_current_carbon_intensity(simulation_id="sim-123", db=object())
+
+    assert result == {"simulation_id": "sim-123", "carbon_intensity": 42.0}
+    assert captured["simulation_id"] == "sim-123"
+    assert "db" in captured
+
+
+@pytest.mark.asyncio
+async def test_get_v3_carbon_intensity_current_formats_primary(monkeypatch) -> None:
+    """v3 current endpoint returns EM formatted payload from primary data."""
+    sample_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        app_module,
+        "get_primary_carbon_intensity",
+        lambda region, update, db: {"primary": {"time": sample_time, "carbon_intensity": 111}},
+    )
+
+    result = await get_v3_carbon_intensity_current(zone="de", db=object())
+
+    assert result["zone"] == "DE"
+    assert result["carbonIntensity"] == 111.0
+    assert result["datetime"].endswith("Z")
+    assert result["temporalGranularity"] == "notimplemented"
+    assert result["emissionFactorType"] == "lifecycle"
+
+
+@pytest.mark.asyncio
+async def test_get_v3_carbon_intensity_current_uses_auth_token(monkeypatch) -> None:
+    """v3 current endpoint delegates to simulation when auth-token provided."""
+    captured = {}
+
+    async def fake_get_simulation_carbon(simulation_id, db):
+        captured["simulation_id"] = simulation_id
+        captured["db"] = db
+        return {"simulation_id": simulation_id, "carbon_intensity": 55}
+
+    monkeypatch.setattr(app_module, "get_simulation_carbon", fake_get_simulation_carbon)
+
+    result = await get_v3_carbon_intensity_current(zone="DE", auth_token="sim-99", db=object())
+
+    assert result["carbonIntensity"] == 55.0
+    assert captured["simulation_id"] == "sim-99"
+    assert "db" in captured
+
+
+@pytest.mark.asyncio
 async def test_get_current_carbon_intensity_not_found(monkeypatch) -> None:
     """Current endpoint raises 404 when no data."""
     monkeypatch.setattr(app_module, "fetch_latest", lambda db, region: {})
@@ -122,6 +183,55 @@ async def test_get_primary_carbon_intensity_missing_primary_data(monkeypatch) ->
 
     assert exc.value.status_code == 404
     assert "primary provider" in str(exc.value.detail).lower()
+
+
+@pytest.mark.asyncio
+async def test_get_v3_carbon_intensity_history_returns_last_24_hours(monkeypatch) -> None:
+    """v3 history endpoint returns 24h window in EM format."""
+    captured = {}
+    t1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    t2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
+
+    def fake_fetch_between(db, region, start, end):
+        captured["region"] = region
+        captured["start"] = start
+        captured["end"] = end
+        return [
+            {"time": t1, "carbon_intensity": 100},
+            {"time": t2, "carbon_intensity": 200},
+        ]
+
+    monkeypatch.setattr(app_module, "fetch_between", fake_fetch_between)
+
+    result = await get_v3_carbon_intensity_history(zone="de", db=object())
+
+    assert result["zone"] == "DE"
+    assert len(result["history"]) == 2
+    assert result["history"][0]["carbonIntensity"] == 100.0
+    assert captured["end"] - captured["start"] == timedelta(hours=24)
+    assert result["history"][0]["datetime"].endswith("Z")
+
+
+@pytest.mark.asyncio
+async def test_get_v3_carbon_intensity_history_uses_auth_token(monkeypatch) -> None:
+    """v3 history endpoint returns simulated data when auth-token provided."""
+    captured = {}
+
+    async def fake_get_simulation_carbon(simulation_id, db):
+        captured["simulation_id"] = simulation_id
+        captured["db"] = db
+        return {"simulation_id": simulation_id, "carbon_intensity": 77}
+
+    monkeypatch.setattr(app_module, "get_simulation_carbon", fake_get_simulation_carbon)
+
+    result = await get_v3_carbon_intensity_history(zone="DE", auth_token="sim-2", db=object())
+
+    assert result["zone"] == "DE"
+    assert len(result["history"]) == 1
+    assert result["history"][0]["carbonIntensity"] == 77.0
+    assert result["history"][0]["createdAt"] == result["history"][0]["updatedAt"]
+    assert captured["simulation_id"] == "sim-2"
+    assert "db" in captured
 
 
 @pytest.mark.asyncio

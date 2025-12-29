@@ -52,6 +52,9 @@ def run_cron(region=None) -> None:
             # We have the update logic here and not in the provider as I
             # want to keep providers decoupled and focused on data retrieval only.
             data = provider.get_historical(region)
+            if not data:
+                logger.error("No data returned for '%s' from '%s'.", region, provider_name)
+                continue
             for d in data:
                 cur.execute(
                     """

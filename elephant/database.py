@@ -46,6 +46,22 @@ def init_db() -> None:
       timescaledb.partition_column='time',
       timescaledb.segmentby='provider'
     );
+
+    CREATE TABLE IF NOT EXISTS simulation_runs (
+      simulation_id     UUID PRIMARY KEY,
+      grid_values       DOUBLE PRECISION[] NOT NULL,
+      calls             INTEGER[] NULL,
+      current_index     INTEGER NOT NULL DEFAULT 0,
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS simulation_calls (
+      id                BIGSERIAL PRIMARY KEY,
+      simulation_id     UUID NOT NULL REFERENCES simulation_runs(simulation_id) ON DELETE CASCADE,
+      called_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      carbon_intensity  DOUBLE PRECISION NOT NULL,
+      idx               INTEGER NOT NULL
+    );
     """
 
     with db_connection() as conn, conn.cursor() as cur:

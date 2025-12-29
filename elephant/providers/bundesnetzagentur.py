@@ -1,7 +1,7 @@
 """Bundesnetzagentur (SMARD) provider for German grid carbon intensity."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List
 
 
@@ -13,6 +13,8 @@ from elephant.config import ProviderConfig
 
 logger = logging.getLogger(__name__)
 
+PROVICER_NAME = "bundesnetzagentur"
+
 class BundesnetzagenturProvider(CarbonIntensityProvider):
     """Provider for Bundesnetzagentur (SMARD) carbon intensity data."""
 
@@ -22,8 +24,8 @@ class BundesnetzagenturProvider(CarbonIntensityProvider):
         self.config = config
 
     def get_current(self, region: str) -> List[dict]:
-        data = get_co2intensity(region, self.RESOLUTION, all=False)
-        
+        data = get_co2intensity(region, self.RESOLUTION, scan_all=False)
+
         if not data:
             return None
 
@@ -33,7 +35,8 @@ class BundesnetzagenturProvider(CarbonIntensityProvider):
                 "region": region,
                 "time": i,
                 "carbon_intensity": j,
-                "provider": "bundesnetzagentur"
+                "provider": PROVICER_NAME,
+                "resolution": self.RESOLUTION
             })
 
         return returnList
@@ -51,13 +54,13 @@ class BundesnetzagenturProvider(CarbonIntensityProvider):
         filtered: List[dict] = []
         for entry in data:
             ts = entry.get("time", None)
-            
+
             if end_time and ts < end_time:
                 continue
-            
+
             if end_time and ts > end_time:
                 continue
-            
+
             filtered.append(entry)
 
         return filtered

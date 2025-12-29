@@ -1,37 +1,44 @@
 
 import logging
+from typing import Callable
 
 from .base import CarbonIntensityProvider
 from .electricitymaps import ElectricityMapsProvider
 from .bundesnetzagentur import BundesnetzagenturProvider
 from .bundesnetzagentur_all import BundesnetzagenturProvider as BundesnetzagenturAllProvider
 from .energycharts import EnergyChartsProvider
-from ..config import config
+from ..config import ProviderConfig, config
 
 logging.basicConfig(level=config.logging.level)
 logger = logging.getLogger(__name__)
 
+_PROVIDER_FACTORIES: dict[str, Callable[[ProviderConfig], CarbonIntensityProvider]] = {
+    "electricitymaps": ElectricityMapsProvider,
+    "energycharts": EnergyChartsProvider,
+    "bundesnetzagentur": BundesnetzagenturProvider,
+    "bundesnetzagentur_all": BundesnetzagenturAllProvider,
+}
+
 
 def get_providers() -> dict[str, CarbonIntensityProvider]:
-    """Initialize and return the configured providers."""
+    """Initialize and return the providers referenced by cron sources."""
 
     providers: dict[str, CarbonIntensityProvider] = {}
+    seen: set[str] = set()
 
-    if config.providers.get("electricitymaps") and config.providers["electricitymaps"].enabled:
-        providers["electricitymaps"] = ElectricityMapsProvider(config.providers["electricitymaps"])
-        logger.debug("ElectricityMaps provider initialized")
+    for source in config.cron.sources:
+        provider_name = source.provider.lower()
+        if provider_name in seen:
+            continue
 
-    if config.providers.get("energycharts") and config.providers["energycharts"].enabled:
-        providers["energycharts"] = EnergyChartsProvider(config.providers["energycharts"])
-        logger.debug("EnergyCharts provider initialized")
+        factory = _PROVIDER_FACTORIES.get(provider_name, None)
 
-    if config.providers.get("bundesnetzagentur") and config.providers["bundesnetzagentur"].enabled:
-        providers["bundesnetzagentur"] = BundesnetzagenturProvider(config.providers["bundesnetzagentur"])
-        logger.debug("Bundesnetzagentur provider initialized")
+        if not factory:
+            raise ValueError(f"Provider '{provider_name}' referenced in cron but no implementation is available.")
 
-    if config.providers.get("bundesnetzagentur_all") and config.providers["bundesnetzagentur_all"].enabled:
-        providers["bundesnetzagentur_all"] = BundesnetzagenturAllProvider(config.providers["bundesnetzagentur_all"])
-        logger.debug("Bundesnetzagentur all provider initialized")
-
+        provider_config = config.providers.get(provider_name, ProviderConfig())
+        providers[provider_name] = factory(provider_config)
+        seen.add(provider_name)
+        logger.debug("%s provider initialized", provider_name)
 
     return providers

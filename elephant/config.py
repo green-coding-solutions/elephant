@@ -16,7 +16,6 @@ DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yml"
 class ProviderConfig(BaseModel):
     """Configuration for a carbon intensity provider."""
 
-    enabled: bool = False
     api_token: Optional[str] = None
 
 class DatabaseConfig(BaseModel):

@@ -7,8 +7,8 @@ Running this takes quite some time and is not recommended for production use.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import List, NoReturn, Sequence, Tuple
+from datetime import datetime
+from typing import List
 
 
 from elephant.providers.bna_helper import get_co2intensity
@@ -19,6 +19,8 @@ from elephant.config import ProviderConfig
 
 logger = logging.getLogger(__name__)
 
+PROVIDER_NAME = "bundesnetzagentur"
+
 class BundesnetzagenturProvider(CarbonIntensityProvider):
     """Provider for Bundesnetzagentur (SMARD) carbon intensity data."""
 
@@ -28,8 +30,8 @@ class BundesnetzagenturProvider(CarbonIntensityProvider):
         self.config = config
 
     def get_current(self, region: str) -> List[dict]:
-        data = get_co2intensity(region, self.RESOLUTION, all=True)
-        
+        data = get_co2intensity(region, self.RESOLUTION, scan_all=True)
+
         if not data:
             return None
 
@@ -39,7 +41,8 @@ class BundesnetzagenturProvider(CarbonIntensityProvider):
                 "region": region,
                 "time": i,
                 "carbon_intensity": j,
-                "provider": "bundesnetzagentur"
+                "provider": PROVIDER_NAME,
+                "resolution": self.RESOLUTION
             })
 
         return returnList

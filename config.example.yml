@@ -8,12 +8,7 @@ database:
 # Provider configuration
 providers:
   electricitymaps:
-    enabled: false
     api_token: "YOUR TOKEN HERE"
-  energycharts:
-    enabled: true
-  bundesnetzagentur:
-    enabled: true
 
 # Cron job for fetching data
 cron:
@@ -21,13 +16,16 @@ cron:
   sources:
     - region: "DE"
       provider: "bundesnetzagentur"
-    - region: "DE"
-      provider: "electricitymaps"
-      primary: true
+      primary: true # If you have multiple sources for the same region, one should be marked as primary so the api knows which to return by default
     - region: "DE"
       provider: "energycharts"
-    - region: "FR"
-      provider: "electricitymaps"
+    # - region: "DE"
+    #   provider: "bundesnetzagentur_all"
+    # - region: "DE"
+    #   provider: "electricitymaps"
+    #   primary: true
+    # - region: "FR"
+    #   provider: "electricitymaps"
 
 # Logging
 logging:

@@ -6,10 +6,10 @@ BASE = "https://www.smard.de/app/chart_data"
 
 # All Numbers from https://www.umweltbundesamt.de/sites/default/files/medien/11850/publikationen/03_2025_cc_emissionsbilanz_erneuerbarer_energien_2023.pdf
 filters = {
-    # Braunkohle 
+    # Braunkohle
     "1223": 409.03,  # Page 50, Tabelle 6
 
-    # Kernenergie 
+    # Kernenergie
     #"1224": 18.27 ,    # Page 50, Tabelle 6
 
     # Wind Offshore
@@ -63,31 +63,31 @@ def fetch_json(url: str) -> Optional[dict]:
 
 
 def get_latest_timestamp(smard_filter, region= "DE", res= "quarterhour") -> Optional[int]:
-    
-    idx = fetch_json(f"{BASE}/{smard_filter}/{region}/index_{res}.json")    
+
+    idx = fetch_json(f"{BASE}/{smard_filter}/{region}/index_{res}.json")
     if not idx:
         return None
-    
+
     timestamps = idx.get("timestamps", None)
-    
+
     if not timestamps:
         return None
-    
+
     return timestamps
 
 def get_series(smard_filter, timestamp, region= "DE", res= "quarterhour") -> Optional[dict]:
     data = fetch_json(f"{BASE}/{smard_filter}/{region}/{smard_filter}_{region}_{res}_{timestamp}.json")
-    
+
     if not data:
         return None
-    
+
     load_series = dict(data.get("series"))
     load_series = {t_ms: val for t_ms, val in load_series.items() if val is not None}
-    
+
     return load_series
 
 
-def get_co2intensity(region: str, resolution: str, all: bool = False) -> Optional[tuple[dict[int, float], dict[int, tuple[float, float]]]]:
+def get_co2intensity(region: str, resolution: str, scan_all: bool = False) -> Optional[tuple[dict[int, float], dict[int, tuple[float, float]]]]:
 
     # We need to get the timestamps that we can get data for
     time_stamps = get_latest_timestamp(LOAD_FILTER, region, resolution)
@@ -95,27 +95,26 @@ def get_co2intensity(region: str, resolution: str, all: bool = False) -> Optiona
     if time_stamps is None:
         return None
 
-    if not all:
+    if not scan_all:
         time_stamps = [max(time_stamps)]
 
     ci = {}  # timestamp_ms → gCO2eq/kWh
 
     for ts in time_stamps:
-        print("Geeting data for timestamp:", ts)
-    
         load_series = get_series(LOAD_FILTER, ts, region, resolution)
-                
+
+
         if not load_series:
             return None
-        
-        # Build a cache of all the different generation methods with the same timestamp 
+
+        # Build a cache of all the different generation methods with the same timestamp
         generation_series: dict[str, dict[int, float]] = {}
 
         for f_id in filters:
             gen_series = get_series(f_id, ts, region, resolution)
             if gen_series is None:
-                return None
-            
+                continue
+
             generation_series[f_id] = dict(gen_series)
 
         for t_ms, _ in load_series.items():
@@ -126,7 +125,10 @@ def get_co2intensity(region: str, resolution: str, all: bool = False) -> Optiona
 
             for f_id, factor in filters.items():
 
-                gen_series = generation_series[f_id]
+                gen_series = generation_series.get(f_id, None)
+                if gen_series is None:
+                    continue
+
                 gen_mw = gen_series.get(t_ms, None)
                 if gen_mw is None:
                     gen_series = get_series(f_id, ts, region, resolution)
@@ -134,7 +136,7 @@ def get_co2intensity(region: str, resolution: str, all: bool = False) -> Optiona
                         return None
                     generation_series[f_id] = gen_series
                     gen_mw = gen_series.get(t_ms, None)
-                
+
                 # Some providers don't update as fast as the main times. In this case we abort and wait for this data to be available
                 if gen_mw is None:
                     abort = True
@@ -152,7 +154,7 @@ def get_co2intensity(region: str, resolution: str, all: bool = False) -> Optiona
 
 
 if __name__ == "__main__":
-    result = get_co2intensity("DE", "quarterhour", all=False)
+    result = get_co2intensity("DE", "quarterhour", scan_all=False)
     if result is None:
         print("Failed to fetch data from SMARD.")
     else:

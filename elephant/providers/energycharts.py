@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.energy-charts.info"
 PROVIDER_NAME = "energycharts"
-
+RESOLUTION="15_minutes"
 
 class EnergyChartsProvider(CarbonIntensityProvider):
     """Provider for EnergyCharts carbon intensity data."""
@@ -59,6 +59,7 @@ class EnergyChartsProvider(CarbonIntensityProvider):
                     "time": datetime.fromtimestamp(ts, tz=timezone.utc),
                     "carbon_intensity": value,
                     "provider": PROVIDER_NAME,
+                    "resolution": RESOLUTION,
                 }
             )
 
