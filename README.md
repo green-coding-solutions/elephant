@@ -117,3 +117,15 @@ They mirror the Electricity Maps API schema. To serve simulated data to an Elect
 curl -H "auth-token: <simulation_id>" "http://localhost:8000/v3/carbon-intensity/current?zone=DE"
 curl -H "auth-token: <simulation_id>" "http://localhost:8000/v3/carbon-intensity/history?zone=DE"
 ```
+
+
+## Credit / Funding
+
+This work is funded by the Deutsche Bundesstiftung Umwelt (DBU) under the number [DBU Project 39703/01](https://www.dbu.de/projektdatenbank/39703-01/)
+
+Project details are to be found on the [project page](https://greencoding.f2.htw-berlin.de/projekte/caso-entwicklung-von-technologien-zur-co2-und-energieeinsparung-bei-der-softwareentwicklung/)
+
+![DBU Logo](https://www.dbu.de/app/uploads/jpg-DBU-Logosponsored-by-RGB.jpg)
+
+We are super grateful for this funding and are blessed to have been granted the opportunity to create this data repository for the greater
+software community!
