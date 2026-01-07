@@ -53,7 +53,7 @@ You should be able to
 
 ```
 pip install -r requirements-dev.txt
-pylint pylint --recursive=y elephant/
+pylint --recursive=y elephant/
 pytest tests
 ```
 

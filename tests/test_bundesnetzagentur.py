@@ -16,7 +16,7 @@ def test_get_current_returns_expected_format():
 
     if result:
         entry = result[0]
-        assert set(entry.keys()) == {"region", "time", "carbon_intensity", "provider", "resolution"}
+        assert set(entry.keys()) == {"region", "time", "carbon_intensity", "provider", "resolution", "estimation"}
         assert entry["region"] == "DE"
         assert isinstance(entry["time"], datetime)
 

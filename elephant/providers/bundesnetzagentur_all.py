@@ -42,7 +42,8 @@ class BundesnetzagenturProvider(CarbonIntensityProvider):
                 "time": i,
                 "carbon_intensity": j,
                 "provider": PROVIDER_NAME,
-                "resolution": self.RESOLUTION
+                "resolution": self.RESOLUTION,
+                "estimation": False,
             })
 
         return returnList

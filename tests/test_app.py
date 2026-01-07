@@ -68,12 +68,12 @@ async def test_get_current_carbon_intensity_triggers_update(monkeypatch) -> None
     """Current endpoint triggers cron when update=True."""
     called = {}
 
-    async def fake_run_in_threadpool(func, region=None):
-        called["region"] = region
+    async def fake_run_in_threadpool(func, specific_region=None):
+        called["region"] = specific_region
         return None
 
     monkeypatch.setattr(app_module, "run_in_threadpool", fake_run_in_threadpool)
-    monkeypatch.setattr(app_module, "fetch_latest", lambda db, region: {"provider": {"carbon_intensity": 1}})
+    monkeypatch.setattr(app_module, "fetch_latest", lambda db, region: {"provider": {"carbon_intensity": 1}} )
 
     await get_current_carbon_intensity(region="FR", update=True, db=object())
     assert called["region"] == "FR"
@@ -154,15 +154,16 @@ async def test_get_primary_carbon_intensity_returns_primary(monkeypatch) -> None
     monkeypatch.setattr(
         app_module,
         "fetch_latest",
-        lambda db, region: {
-            "electricitymaps_de": {"time": "t1", "carbon_intensity": 111},
-            "bundesnetzagentur": {"time": "t2", "carbon_intensity": 222},
-        },
+        lambda db, region: [
+            {"provider": "electricitymaps_de","time": "t1", "carbon_intensity": 111},
+            {"provider": "bundesnetzagentur", "time": "t2", "carbon_intensity": 222},
+        ],
     )
 
     result = await get_primary_carbon_intensity(region="DE", update=False, db=object())
-    assert list(result.keys()) == ["electricitymaps_de"]
-    assert result["electricitymaps_de"]["carbon_intensity"] == 111
+    assert len(result) == 1
+    assert result[0]['provider'] == "electricitymaps_de"
+    assert result[0]["carbon_intensity"] == 111
 
 
 @pytest.mark.asyncio
@@ -173,9 +174,9 @@ async def test_get_primary_carbon_intensity_missing_primary_data(monkeypatch) ->
     monkeypatch.setattr(
         app_module,
         "fetch_latest",
-        lambda db, region: {
-            "bundesnetzagentur": {"time": "t2", "carbon_intensity": 222},
-        },
+        lambda db, region: [
+            {"provider":"bundesnetzagentur", "time": "t2", "carbon_intensity": 222},
+        ],
     )
 
     with pytest.raises(HTTPException) as exc:
@@ -192,7 +193,7 @@ async def test_get_v3_carbon_intensity_history_returns_last_24_hours(monkeypatch
     t1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
     t2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
 
-    def fake_fetch_between(db, region, start, end):
+    def fake_fetch_between(db, region, start, end, provider=None):
         captured["region"] = region
         captured["start"] = start
         captured["end"] = end
@@ -238,7 +239,7 @@ async def test_get_v3_carbon_intensity_history_uses_auth_token(monkeypatch) -> N
 async def test_get_carbon_intensity_history(monkeypatch) -> None:
     """History endpoint returns windowed data."""
     sample = [{"time": "t1"}, {"time": "t2"}]
-    monkeypatch.setattr(app_module, "fetch_between", lambda db, region, start, end: sample)
+    monkeypatch.setattr(app_module, "fetch_between", lambda db, region, start, end, provider=None: sample)
     result = await get_carbon_intensity_history(
         region="DE", startTime="2025-09-22T10:00:00Z", endTime="2025-09-22T12:00:00Z", db=object()
     )

@@ -60,6 +60,7 @@ class EnergyChartsProvider(CarbonIntensityProvider):
                     "carbon_intensity": value,
                     "provider": PROVIDER_NAME,
                     "resolution": RESOLUTION,
+                    "estimation": idx >= len(co2eq) or co2eq[idx] is None,
                 }
             )
 

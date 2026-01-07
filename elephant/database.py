@@ -39,7 +39,8 @@ def init_db() -> None:
       time              TIMESTAMPTZ       NOT NULL,
       region            TEXT              NOT NULL,
       carbon_intensity  DOUBLE PRECISION  NULL,
-      provider          TEXT              NULL
+      provider          TEXT              NULL,
+      estimation        BOOLEAN           NOT NULL DEFAULT FALSE
     )
     WITH (
       timescaledb.hypertable,
@@ -77,39 +78,37 @@ def fetch_latest(conn: Connection, region: str) -> dict[str, dict]:
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
-            SELECT DISTINCT ON (provider) provider, time, carbon_intensity
+            SELECT DISTINCT ON (provider) provider, time, carbon_intensity::double precision, estimation
             FROM carbon
             WHERE region = %s
             ORDER BY provider, time DESC;
             """,
-            (region,),
+            (region,)
         )
-        rows = cur.fetchall()
 
-    return {
-        row["provider"]: {
-            "time": row["time"],
-            "carbon_intensity": row["carbon_intensity"],
-        }
-        for row in rows
-        if row.get("provider") is not None
-    }
+        return cur.fetchall()
 
 
-def fetch_between(conn: Connection, region: str, start_time, end_time) -> list[dict]:
-    """Return rows within the requested window for a region."""
+def fetch_between(conn: Connection, region: str, start_time, end_time, provider = None) -> list[dict]:
+    """Return rows within the requested window for a region, optionally filtered by provider."""
+
+    query = """
+        SELECT time, carbon_intensity::double precision, provider, estimation
+        FROM carbon
+        WHERE region = %s
+          AND time >= %s
+          AND time <= %s
+    """
+    params = [region, start_time, end_time]
+
+    if provider:
+        query += "  AND provider = %s\n"
+        params.append(provider)
+
+    query += "ORDER BY time;"
+
     with conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(
-            """
-            SELECT time, carbon_intensity, provider
-            FROM carbon
-            WHERE region = %s
-              AND time >= %s
-              AND time <= %s
-            ORDER BY time;
-            """,
-            (region, start_time, end_time),
-        )
+        cur.execute(query, params)
         return cur.fetchall()
 
 def fetch_regions(conn: Connection) -> list[str]:

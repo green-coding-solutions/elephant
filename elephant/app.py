@@ -53,7 +53,7 @@ def _get_primary_source(region: str) -> str:
     if len(primary_sources) > 1:
         logger.warning("Multiple primary providers configured for %s; using '%s'", region_upper, primary_sources[0])
 
-    return primary_sources[0].lower()
+    return f"{primary_sources[0].lower()}_{region.lower()}"
 
 
 @asynccontextmanager
@@ -117,6 +117,20 @@ def _normalize_region(region: Optional[str]) -> str:
 
     return region.upper()
 
+
+async def _handle_update(update: bool|str, region: str) -> None:
+    """Handle update logic for endpoints."""
+
+    if update:
+        if update is True or (isinstance(update, str) and update.lower() == 'true'):
+            logger.info("Updating carbon intensity data for region '%s'...", region)
+            await run_in_threadpool(run_cron, specific_region=region)
+        elif isinstance(update, str):
+            logger.info("Updating carbon intensity data for region '%s' and provider '%s'...", region, update)
+            await run_in_threadpool(run_cron, specific_region=region, specific_provider=update)
+
+
+
 def _to_iso(dt: datetime) -> str:
     """Return an ISO string with a Z suffix for UTC datetimes."""
     if dt.tzinfo is None:
@@ -162,7 +176,7 @@ async def get_current_carbon_intensity(
     region: Annotated[Optional[str], Query(description="Country code (e.g., 'DE', 'US', 'FR')")] = None,
     simulation_id: Annotated[Optional[str], Query(description="Simulation identifier")] = None,
     update: Annotated[bool, Query(description="If true, fetch fresh data before returning results")] = False,
-    db: Connection = Depends(connection_dependency)) -> Dict[str, Any]:
+    db: Connection = Depends(connection_dependency)) -> List[dict]:
     """Get current carbon grid intensity for a region or a simulation response."""
 
     if simulation_id:
@@ -170,8 +184,7 @@ async def get_current_carbon_intensity(
 
     region = _normalize_region(region)
 
-    if update:
-        await run_in_threadpool(run_cron, region=region)
+    await _handle_update(update, region)
 
     # Query the database for the most recent entry
     results = fetch_latest(db, region)
@@ -189,9 +202,9 @@ async def get_current_carbon_intensity(
 async def get_primary_carbon_intensity(
     region: Annotated[str, Query(..., description="Country code (e.g., 'DE', 'US', 'FR')")],
     simulation_id: Annotated[Optional[str], Query(description="Simulation identifier")] = None,
-    update: Annotated[bool, Query(description="If true, fetch fresh data before returning results")] = False,
+    update: Annotated[bool, Query(description="If true, fetch fresh data before returning results.")] = False,
     db: Connection = Depends(connection_dependency),
-) -> Dict[str, Any]:
+) -> List[dict]:
     """Get current carbon grid intensity for the configured primary provider for the region."""
 
     if simulation_id:
@@ -200,25 +213,19 @@ async def get_primary_carbon_intensity(
     region = _normalize_region(region)
 
     results = await get_current_carbon_intensity(region=region, update=update, db=db)
+    print(results)
 
     primary_source = _get_primary_source(region)
 
-    matched_key = next(
-        (
-            key
-            for key in results.keys()
-            if key.lower() == primary_source or key.lower().startswith(f"{primary_source}_")
-        ),
-        None,
-    )
+    matched = [key for key in results if key.get("provider") == primary_source]
 
-    if not matched_key:
+    if not matched:
         raise HTTPException(
             status_code=404,
             detail=f"No carbon intensity data available for primary provider '{primary_source}' in this region.",
         )
 
-    return {matched_key: results[matched_key]}
+    return matched
 
 
 @app.get("/carbon-intensity/history")
@@ -226,6 +233,8 @@ async def get_carbon_intensity_history(
     region: Annotated[str, Query(..., description="Country code (e.g., 'DE', 'US', 'FR')")],
     startTime: Annotated[str, Query(..., description="Start time in ISO 8601 format (e.g., '2025-09-22T10:00:00Z')")],
     endTime: Annotated[str, Query(..., description="End time in ISO 8601 format (e.g., '2025-09-22T12:00:00Z')")],
+    provider: Annotated[Optional[str], Query(description="Optional filter by a provider")] = None,
+    update: Annotated[bool|str, Query(description="If true, fetch fresh data before returning results. If string updates only that provider")] = False,
     db: Connection = Depends(connection_dependency)
 ) -> List[dict]:
     """Get historical carbon grid intensity for a region and time range."""
@@ -237,6 +246,7 @@ async def get_carbon_intensity_history(
         raise HTTPException(status_code=400, detail="endTime parameter is required")
 
     region = _normalize_region(region)
+    await _handle_update(update, region)
 
     # Parse datetime strings
     try:
@@ -253,7 +263,7 @@ async def get_carbon_intensity_history(
         raise HTTPException(status_code=400, detail="startTime must be before endTime")
 
     # Query the database
-    results = fetch_between(db, region, start_dt, end_dt)
+    results = fetch_between(db, region, start_dt, end_dt, provider)
 
     return results or []
 

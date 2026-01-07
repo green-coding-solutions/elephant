@@ -28,7 +28,7 @@ def wait_with_signal_check(total_seconds: int) -> bool:
     return shutdown_event.is_set()
 
 
-def run_cron(region=None) -> None:
+def run_cron(specific_region=None, specific_provider=None) -> None:
     """Run a single cron iteration."""
     providers: dict[str, CarbonIntensityProvider] = get_providers()
 
@@ -38,12 +38,18 @@ def run_cron(region=None) -> None:
             provider_name = source.provider.lower()
             provider_db_name = f"{source.provider.lower()}_{region.lower()}"
 
-            if region and region != source.region.upper():
+            if specific_region and specific_region.upper() != region:
+                logger.debug("Skipping region '%s' as specific_region is set to '%s'.", region, specific_region)
+                continue
+
+            if specific_provider and specific_provider.lower() != provider_name:
+                logger.debug("Skipping provider '%s' as specific_provider is set to '%s'.", provider_name, specific_provider)
                 continue
 
             if provider_name not in providers:
                 logger.warning("Provider '%s' for region '%s' is not configured or enabled.", provider_name, region)
                 continue
+
 
             provider = providers[provider_name]
 
@@ -52,14 +58,20 @@ def run_cron(region=None) -> None:
             # We have the update logic here and not in the provider as I
             # want to keep providers decoupled and focused on data retrieval only.
             data = provider.get_historical(region)
+
             if not data:
                 logger.error("No data returned for '%s' from '%s'.", region, provider_name)
                 continue
+            inserted_count = 0
             for d in data:
+
+                if set(d.keys()) != {"region", "time", "carbon_intensity", "provider", "resolution", "estimation"}:
+                    raise ValueError(f"Provider '{provider_name}' returned data with invalid keys: {set(d.keys())}")
+
                 cur.execute(
                     """
-                    INSERT INTO carbon (time, region, carbon_intensity, provider)
-                    SELECT %s, %s, %s, %s
+                    INSERT INTO carbon (time, region, carbon_intensity, provider, estimation)
+                    SELECT %s, %s,  %s, %s, %s
                     WHERE NOT EXISTS (
                         SELECT 1
                         FROM carbon
@@ -73,15 +85,24 @@ def run_cron(region=None) -> None:
                         d["region"],
                         d.get("carbon_intensity"),
                         provider_db_name,
+                        d["estimation"],
                         d["time"],
                         d["region"],
                         provider_db_name,
                     ),
                 )
+                if cur.rowcount and cur.rowcount > 0:
+                    inserted_count += cur.rowcount
 
             conn.commit()
 
-            logger.info("Successfully saved data for '%s' from '%s'.", region, provider_name)
+            logger.info(
+                "Successfully received data (%s records, %s inserts) for '%s' from '%s'.",
+                len(data),
+                inserted_count,
+                region,
+                provider_name,
+            )
 
 
 if __name__ == "__main__":

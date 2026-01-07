@@ -1,7 +1,7 @@
 """ElectricityMaps provider for carbon intensity data."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 import requests
@@ -50,15 +50,16 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                 "carbon_intensity": data["carbonIntensity"],
                 "provider": PROVIDER_NAME,
                 "resolution": RESOLUTION,
+                "estimation": data.get("isEstimated", False),
             }
         ]
 
     def get_historical(self, region: str, start_time: datetime = None, end_time: datetime = None) -> List[dict]:
         """Get historical carbon intensity data for a region and time range."""
         if start_time is None:
-            start_time = datetime.now() - timedelta(hours=24)
+            start_time = datetime.now(tz=timezone.utc) - timedelta(hours=24)
         if end_time is None:
-            end_time = datetime.now()
+            end_time = datetime.now(tz=timezone.utc)
 
         response = self._get(
             "/v3/carbon-intensity/past-range",
@@ -82,7 +83,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                     "carbon_intensity": item["carbonIntensity"],
                     "provider": PROVIDER_NAME,
                     "resolution": RESOLUTION,
+                    "estimation": item.get("isEstimated", False),
                 }
             )
-
         return all_data
