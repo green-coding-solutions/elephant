@@ -50,3 +50,6 @@ class BundesnetzagenturProvider(CarbonIntensityProvider):
 
     def get_historical(self, region: str, start_time: datetime = None, end_time: datetime = None) -> List[dict]:
         raise NotImplementedError("Bundesnetzagentur all provider does not support historical data filtering as it takes too long to fetch all data.")
+
+    def get_future(self, region: str) -> List[dict]:
+        raise NotImplementedError("Bundesnetzagentur all provider does not support future data.")

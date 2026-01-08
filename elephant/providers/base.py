@@ -16,3 +16,8 @@ class CarbonIntensityProvider(ABC):
     def get_historical(
         self, region: str, start_time: datetime, end_time: datetime) -> List[dict]:
         """Get historical carbon intensity data for a region and time range."""
+
+    @abstractmethod
+    def get_future(
+        self, region: str) -> List[dict]:
+        """Get future carbon intensity data for a region."""

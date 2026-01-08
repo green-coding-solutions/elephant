@@ -71,10 +71,12 @@ class EnergyChartsProvider(CarbonIntensityProvider):
         data = self._get(region)
         entries = self._build_entries(data, region.upper())
 
+        entries = [entry for entry in entries if not entry["estimation"]]
+
         if not entries:
             raise HTTPException(status_code=404, detail="No EnergyCharts data available")
 
-        return [entries[-1]]
+        return [entries]
 
     def get_historical(self, region: str, start_time: datetime = None, end_time: datetime = None) -> List[dict]:
         """Get historical carbon intensity data for a region and time range."""
@@ -87,3 +89,14 @@ class EnergyChartsProvider(CarbonIntensityProvider):
         entries = self._build_entries(data, region.upper())
 
         return [entry for entry in entries if start_time <= entry["time"] <= end_time]
+
+    def get_future(self, region: str) -> List[dict]:
+        data = self._get(region)
+        entries = self._build_entries(data, region.upper())
+
+        entries = [entry for entry in entries if entry["estimation"]]
+
+        if not entries:
+            raise HTTPException(status_code=404, detail="No EnergyCharts data available")
+
+        return [entries]

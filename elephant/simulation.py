@@ -134,7 +134,7 @@ class SimulationStore:
             current_index = run["current_index"]
 
             if current_index >= len(values):
-                raise SimulationExhaustedError("No grid intensity value for current index")
+                return values[current_index]
 
             current_value = values[current_index]
             remaining_calls = calls[current_index]
@@ -188,7 +188,7 @@ class SimulationStore:
 
             next_index = run["current_index"] + 1
             if next_index >= len(run["values"]):
-                raise SimulationExhaustedError("No further values available")
+                return run["values"][next_index - 1]
 
             next_value = run["values"][next_index]
 

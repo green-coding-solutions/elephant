@@ -65,3 +65,7 @@ class BundesnetzagenturProvider(CarbonIntensityProvider):
             filtered.append(entry)
 
         return filtered
+
+    def get_future(self, region: str) -> List[dict]:
+        """Get future carbon intensity data for a region."""
+        return []

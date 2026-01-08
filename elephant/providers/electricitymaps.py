@@ -87,3 +87,29 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                 }
             )
         return all_data
+
+    def get_future(self, region: str) -> List[dict]:
+
+        response = self._get(
+            "/v3/carbon-intensity/forecast",
+            params={
+                "zone": region,
+                "temporalGranularity": RESOLUTION,
+            },
+        )
+
+        all_data = []
+        for item in response.json().get("forecast", []):
+            item_time = datetime.fromisoformat(item["datetime"].replace("Z", "+00:00"))
+            all_data.append(
+                {
+                    "region": region,
+                    "time": item_time,
+                    "carbon_intensity": item["carbonIntensity"],
+                    "provider": PROVIDER_NAME,
+                    "resolution": RESOLUTION,
+                    "estimation": True,
+                }
+            )
+
+        return all_data
