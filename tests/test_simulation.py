@@ -220,15 +220,12 @@ async def test_simulation_invalid_id_raises_not_found(conn) -> None:
 
 
 @pytest.mark.asyncio
-async def test_simulation_next_fails_when_exhausted(conn) -> None:
-    """Advancing past the end of the simulation returns a 400 error."""
+async def test_simulation_next_returns_same(conn) -> None:
+    """Advancing past the end of the simulation always returns the last value."""
     create_response = await create_simulation(SimulationCreateRequest(carbon_values=[1]), db=conn)
     simulation_id = create_response["simulation_id"]
-
-    with pytest.raises(HTTPException) as exc:
-        await advance_simulation(simulation_id=simulation_id, db=conn)
-
-    assert exc.value.status_code == 400
+    current = await advance_simulation(simulation_id=simulation_id, db=conn)
+    assert current["carbon_intensity"] == 1.0
 
 
 @pytest.mark.asyncio
