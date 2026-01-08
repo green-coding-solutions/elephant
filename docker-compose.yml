@@ -9,7 +9,7 @@ services:
     volumes:
       - ./config.yml:/app/config.yml:ro
     ports:
-      - "8000:8000"
+      - "8000:8085"
     restart: unless-stopped
 
   db:

@@ -235,9 +235,13 @@ async def get_carbon_intensity_history(
     endTime: Annotated[str, Query(..., description="End time in ISO 8601 format (e.g., '2025-09-22T12:00:00Z')")],
     provider: Annotated[Optional[str], Query(description="Optional filter by a provider")] = None,
     update: Annotated[bool|str, Query(description="If true, fetch fresh data before returning results. If string updates only that provider")] = False,
+    simulation_id: Annotated[Optional[str], Query(description="Simulation identifier")] = None,
     db: Connection = Depends(connection_dependency)
 ) -> List[dict]:
     """Get historical carbon grid intensity for a region and time range."""
+
+    if simulation_id:
+        return await simulation_stats(simulation_id=simulation_id, db=db)
 
     if not startTime:
         raise HTTPException(status_code=400, detail="startTime parameter is required")

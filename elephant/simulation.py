@@ -232,19 +232,17 @@ class SimulationStore:
             )
             calls = cur.fetchall()
 
-        return {
-            "simulation_id": simulation_id,
-            "current_index": run["current_index"],
-            "total_values": len(run["values"]),
-            "calls": [
-                {
-                    "time": call["called_at"].isoformat(),
-                    "carbon_intensity": float(call["carbon_intensity"]),
-                    "index": int(call["idx"]),
-                }
-                for call in calls
-            ],
-        }
+        return [
+            {
+                'provider': simulation_id,
+                'time': call["called_at"].isoformat(),
+                'carbon_intensity': float(call["carbon_intensity"]),
+                'estimation': True,
+             }
+             for call in calls
+        ]
+
+
 
     def reset(self, conn: Connection | None = None) -> None:
         """Clear simulation tables (intended for tests)."""

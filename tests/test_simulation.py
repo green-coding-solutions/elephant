@@ -158,13 +158,12 @@ async def test_simulation_flow_advances_values(monkeypatch, conn) -> None:
 
 
     stats = await simulation_stats(simulation_id=simulation_id, db=conn)
-    assert stats["current_index"] == 2
-    assert stats["total_values"] == 3
-    assert stats["calls"] == [
-        {"time": fixed_time.isoformat(), "carbon_intensity": 5.0, "index": 0},
-        {"time": fixed_time.isoformat(), "carbon_intensity": 10.0, "index": 1},
-        {"time": fixed_time.isoformat(), "carbon_intensity": 15.0, "index": 2}
-    ]
+
+    assert len(stats) == 3
+    assert stats[0]['time'] == fixed_time.isoformat()
+    assert stats[0]['carbon_intensity'] == 5.0
+    assert stats[1]['carbon_intensity'] == 10.0
+    assert stats[2]['carbon_intensity'] == 15.0
 
 @pytest.mark.asyncio
 async def test_simulation_flow_advances_values_tuple(monkeypatch, conn) -> None:
@@ -201,13 +200,11 @@ async def test_simulation_flow_advances_values_tuple(monkeypatch, conn) -> None:
 
 
     stats = await simulation_stats(simulation_id=simulation_id, db=conn)
-    assert stats["current_index"] == 2
-    assert stats["total_values"] == 3
-    assert stats["calls"] == [
-        {"time": fixed_time.isoformat(), "carbon_intensity": 5, "index": 0},
-        {"time": fixed_time.isoformat(), "carbon_intensity": 10.0, "index": 1},
-        {"time": fixed_time.isoformat(), "carbon_intensity": 15.0, "index": 2}
-    ]
+    assert len(stats) == 3
+    assert stats[0]['time'] == fixed_time.isoformat()
+    assert stats[0]['carbon_intensity'] == 5.0
+    assert stats[1]['carbon_intensity'] == 10.0
+    assert stats[2]['carbon_intensity'] == 15.0
 
 
 @pytest.mark.asyncio
@@ -245,8 +242,7 @@ async def test_simulation_persists_and_reads_from_db(conn) -> None:
     assert current["carbon_intensity"] == 4.0
 
     stats = await simulation_stats(simulation_id=simulation_id, db=conn)
-    assert stats["current_index"] == 1
-    assert stats["calls"][0]["carbon_intensity"] == 2.0
+    assert stats[0]["carbon_intensity"] == 2.0
     assert conn.commits >= 2
 
 
@@ -273,9 +269,7 @@ async def test_simulation_auto_advances_after_calls(monkeypatch, conn) -> None:
     assert conn.sim_runs[simulation_id]["calls"][1] == -1
 
     stats = await simulation_stats(simulation_id=simulation_id, db=conn)
-    assert stats["current_index"] == 1
-    assert stats["total_values"] == 2
-    assert stats["calls"] == [
-        {"time": fixed_time.isoformat(), "carbon_intensity": 5.0, "index": 0},
-        {"time": fixed_time.isoformat(), "carbon_intensity": 10.0, "index": 1}
-    ]
+    assert len(stats) == 2
+    assert stats[0]['time'] == fixed_time.isoformat()
+    assert stats[0]['carbon_intensity'] == 5.0
+    assert stats[1]['carbon_intensity'] == 10.0
