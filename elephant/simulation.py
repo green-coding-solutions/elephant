@@ -218,7 +218,6 @@ class SimulationStore:
     def stats(self, simulation_id: str, conn: Connection | None = None) -> dict:
         """Return diagnostic information for a simulation."""
         conn = self._require_conn(conn)
-        run = self._fetch_run(simulation_id, conn)
 
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
