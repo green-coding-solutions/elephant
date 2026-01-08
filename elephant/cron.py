@@ -57,7 +57,10 @@ def run_cron(specific_region=None, specific_provider=None) -> None:
 
             # We have the update logic here and not in the provider as I
             # want to keep providers decoupled and focused on data retrieval only.
-            data = provider.get_historical(region)
+            past = provider.get_historical(region)
+            future = provider.get_future(region)
+
+            data = past + future # For now we merge the two. This will change in the future when modelling becomes more important
 
             if not data:
                 logger.error("No data returned for '%s' from '%s'.", region, provider_name)
