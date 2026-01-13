@@ -41,7 +41,7 @@ You should just be able to do
 docker compose up --build
 ```
 
-and that should set everythin up so that you can access Elephant under `http://localhost:8000/`
+and that should set everythin up so that you can access Elephant under `http://localhost:8085/`
 
 **Required for ElectricityMaps:**
 
@@ -68,15 +68,15 @@ and then run the commands on your development machine
 ```bash
 python3 -m elephant.database
 python3 -m elephant.cron
-python3 -m elephant --host 0.0.0.0 --port 8000
+python3 -m elephant --host 0.0.0.0 --port 8085
 ```
 
 ## API
 
 Once Elephant is running (for example with `docker compose up --build`), the generated docs are available at:
 
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+- Swagger UI: `http://localhost:8085/docs`
+- ReDoc: `http://localhost:8085/redoc`
 
 ### Core endpoints
 
@@ -98,8 +98,8 @@ Elephant includes a lightweight simulator so you can drive client integrations o
 You can plug a simulation into the core responses by passing `simulation_id`:
 
 ```bash
-curl "http://localhost:8000/carbon-intensity/current?region=DE&simulation_id=<simulation_id>"
-curl "http://localhost:8000/carbon-intensity/current/primary?region=DE&simulation_id=<simulation_id>"
+curl "http://localhost:8085/carbon-intensity/current?region=DE&simulation_id=<simulation_id>"
+curl "http://localhost:8085/carbon-intensity/current/primary?region=DE&simulation_id=<simulation_id>"
 ```
 
 ### Electricity Maps compatible endpoints
@@ -107,15 +107,15 @@ curl "http://localhost:8000/carbon-intensity/current/primary?region=DE&simulatio
 For Electricity Maps compatible payloads, use the v3 endpoints:
 
 ```bash
-curl "http://localhost:8000/v3/carbon-intensity/current?zone=DE"
-curl "http://localhost:8000/v3/carbon-intensity/history?zone=DE"
+curl "http://localhost:8085/v3/carbon-intensity/current?zone=DE"
+curl "http://localhost:8085/v3/carbon-intensity/history?zone=DE"
 ```
 
 They mirror the Electricity Maps API schema. To serve simulated data to an Electricity Maps client, send the simulation id as `auth-token`:
 
 ```bash
-curl -H "auth-token: <simulation_id>" "http://localhost:8000/v3/carbon-intensity/current?zone=DE"
-curl -H "auth-token: <simulation_id>" "http://localhost:8000/v3/carbon-intensity/history?zone=DE"
+curl -H "auth-token: <simulation_id>" "http://localhost:8085/v3/carbon-intensity/current?zone=DE"
+curl -H "auth-token: <simulation_id>" "http://localhost:8085/v3/carbon-intensity/history?zone=DE"
 ```
 
 

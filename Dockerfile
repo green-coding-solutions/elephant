@@ -24,6 +24,6 @@ COPY elephant/ elephant/
 COPY start.sh .
 RUN chmod +x /app/start.sh
 
-EXPOSE 8000
+EXPOSE 8085
 
 CMD ["/app/start.sh"]

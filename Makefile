@@ -10,7 +10,7 @@ lint:
 	$(PYTHON) -m pylint --recursive=y elephant/
 
 run:
-	$(PYTHON) -m elephant --host 0.0.0.0 --port 8000
+	$(PYTHON) -m elephant --host 0.0.0.0 --port 8085
 
 db:
 	docker compose up -d db
