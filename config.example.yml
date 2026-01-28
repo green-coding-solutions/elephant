@@ -30,3 +30,10 @@ cron:
 # Logging
 logging:
   level: "INFO"
+
+## If you want to allow elephant to be accessed form other apps
+# CORS
+# cors:
+#   allow_origins:
+#     - "http://localhost:5173"
+#     - "http://metrics.green-coding.internal:9142"

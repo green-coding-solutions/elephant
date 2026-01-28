@@ -43,6 +43,15 @@ class LoggingConfig(BaseModel):
     level: str = Field(default="INFO")
 
 
+class CORSConfig(BaseModel):
+    """Configuration for CORS."""
+
+    allow_origins: list[str] = Field(default_factory=list)
+    allow_credentials: bool = Field(default=False)
+    allow_methods: list[str] = Field(default_factory=lambda: ["*"])
+    allow_headers: list[str] = Field(default_factory=lambda: ["*"])
+
+
 class Config(BaseModel):
     """Main configuration for Elephant service."""
 
@@ -50,6 +59,7 @@ class Config(BaseModel):
     providers: Dict[str, ProviderConfig] = Field(default_factory=dict)
     cron: CronConfig = Field(default_factory=CronConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    cors: CORSConfig = Field(default_factory=CORSConfig)
 
 
 def load_config(config_path: Optional[Path] = None) -> Config:

@@ -23,3 +23,5 @@ venv/
 
 ## Elephant-specific
 config.yml
+
+.idea/*

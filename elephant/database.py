@@ -103,7 +103,7 @@ def fetch_between(conn: Connection, region: str, start_time, end_time, provider 
 
     if provider:
         query += "  AND provider = %s\n"
-        params.append(provider)
+        params.append(provider.lower())
 
     query += "ORDER BY time;"
 

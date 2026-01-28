@@ -36,7 +36,7 @@ def run_cron(specific_region=None, specific_provider=None) -> None:
         for source in config.cron.sources:
             region = source.region.upper()
             provider_name = source.provider.lower()
-            provider_db_name = f"{source.provider.lower()}_{region.lower()}"
+            provider_db_name = f"{source.provider.lower()}_{source.region.lower()}"
 
             if specific_region and specific_region.upper() != region:
                 logger.debug("Skipping region '%s' as specific_region is set to '%s'.", region, specific_region)
@@ -46,30 +46,30 @@ def run_cron(specific_region=None, specific_provider=None) -> None:
                 logger.debug("Skipping provider '%s' as specific_provider is set to '%s'.", provider_name, specific_provider)
                 continue
 
-            if provider_name not in providers:
-                logger.warning("Provider '%s' for region '%s' is not configured or enabled.", provider_name, region)
+            if provider_db_name not in providers:
+                logger.warning("Provider '%s' for region '%s' is not configured or enabled.", provider_db_name, region)
                 continue
 
 
-            provider = providers[provider_name]
+            provider = providers[provider_db_name]
 
-            logger.debug("Fetching data for '%s' from '%s'.", region, provider_name)
+            logger.debug("Fetching data for '%s' from '%s'.", region, provider_db_name)
 
             # We have the update logic here and not in the provider as I
             # want to keep providers decoupled and focused on data retrieval only.
-            past = provider.get_historical(region)
-            future = provider.get_future(region)
+            past = provider.get_historical(region) or []
+            future = provider.get_future(region) or []
 
             data = past + future # For now we merge the two. This will change in the future when modelling becomes more important
 
             if not data:
-                logger.error("No data returned for '%s' from '%s'.", region, provider_name)
+                logger.error("No data returned for '%s' from '%s'.", region, provider_db_name)
                 continue
             inserted_count = 0
             for d in data:
 
                 if set(d.keys()) != {"region", "time", "carbon_intensity", "provider", "resolution", "estimation"}:
-                    raise ValueError(f"Provider '{provider_name}' returned data with invalid keys: {set(d.keys())}")
+                    raise ValueError(f"Provider '{provider_db_name}' returned data with invalid keys: {set(d.keys())}")
 
                 cur.execute(
                     """
@@ -104,7 +104,7 @@ def run_cron(specific_region=None, specific_provider=None) -> None:
                 len(data),
                 inserted_count,
                 region,
-                provider_name,
+                provider_db_name,
             )
 
 

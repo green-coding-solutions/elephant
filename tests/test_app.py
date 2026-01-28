@@ -19,12 +19,12 @@ from elephant.app import (
 from elephant.config import Config, CronConfig, DatabaseConfig, LoggingConfig, ProviderConfig, Source
 
 
-def _make_config(primary_provider: str = "electricitymaps") -> Config:
+def _make_config(primary_provider: str = "energycharts") -> Config:
     """Helper to build a minimal Config for tests."""
     return Config(
         database=DatabaseConfig(url="postgresql://user:pass@localhost:5432/elephant"),
         providers={
-            "electricitymaps": ProviderConfig(enabled=True),
+            "energycharts": ProviderConfig(enabled=True),
             "bundesnetzagentur": ProviderConfig(enabled=True),
         },
         cron=CronConfig(
@@ -81,20 +81,20 @@ async def test_get_current_carbon_intensity_triggers_update(monkeypatch) -> None
 
 @pytest.mark.asyncio
 async def test_get_current_carbon_intensity_uses_simulation_when_provided(monkeypatch) -> None:
-    """Current endpoint returns simulation response when simulation_id is supplied."""
+    """Current endpoint returns simulation response when simulationId is supplied."""
     captured = {}
 
-    async def fake_get_simulation_carbon(simulation_id, db):
-        captured["simulation_id"] = simulation_id
+    async def fake_get_simulation_carbon(simulationId, db):
+        captured["simulationId"] = simulationId
         captured["db"] = db
-        return {"simulation_id": simulation_id, "carbon_intensity": 42.0}
+        return {"simulationId": simulationId, "carbon_intensity": 42.0}
 
     monkeypatch.setattr(app_module, "get_simulation_carbon", fake_get_simulation_carbon)
 
-    result = await get_current_carbon_intensity(simulation_id="sim-123", db=object())
+    result = await get_current_carbon_intensity(simulationId="sim-123", db=object())
 
-    assert result == {"simulation_id": "sim-123", "carbon_intensity": 42.0}
-    assert captured["simulation_id"] == "sim-123"
+    assert result == {"simulationId": "sim-123", "carbon_intensity": 42.0}
+    assert captured["simulationId"] == "sim-123"
     assert "db" in captured
 
 
@@ -122,17 +122,17 @@ async def test_get_v3_carbon_intensity_current_uses_auth_token(monkeypatch) -> N
     """v3 current endpoint delegates to simulation when auth-token provided."""
     captured = {}
 
-    async def fake_get_simulation_carbon(simulation_id, db):
-        captured["simulation_id"] = simulation_id
+    async def fake_get_simulation_carbon(simulationId, db):
+        captured["simulationId"] = simulationId
         captured["db"] = db
-        return {"simulation_id": simulation_id, "carbon_intensity": 55}
+        return {"simulationId": simulationId, "carbon_intensity": 55}
 
     monkeypatch.setattr(app_module, "get_simulation_carbon", fake_get_simulation_carbon)
 
     result = await get_v3_carbon_intensity_current(zone="DE", auth_token="sim-99", db=object())
 
     assert result["carbonIntensity"] == 55.0
-    assert captured["simulation_id"] == "sim-99"
+    assert captured["simulationId"] == "sim-99"
     assert "db" in captured
 
 
@@ -148,28 +148,28 @@ async def test_get_current_carbon_intensity_not_found(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_get_primary_carbon_intensity_returns_primary(monkeypatch) -> None:
     """Primary endpoint returns only the configured primary provider entry."""
-    app_module.config = _make_config(primary_provider="electricitymaps")
+    app_module.config = _make_config(primary_provider="energycharts")
 
     # Stub fetch_latest to simulate DB results
     monkeypatch.setattr(
         app_module,
         "fetch_latest",
         lambda db, region: [
-            {"provider": "electricitymaps_de","time": "t1", "carbon_intensity": 111},
-            {"provider": "bundesnetzagentur", "time": "t2", "carbon_intensity": 222},
+            {"provider": "energycharts_de","time": "t1", "carbon_intensity": 111},
+            {"provider": "bundesnetzagentur_de", "time": "t2", "carbon_intensity": 222},
         ],
     )
 
     result = await get_primary_carbon_intensity(region="DE", update=False, db=object())
     assert len(result) == 1
-    assert result[0]['provider'] == "electricitymaps_de"
+    assert result[0]['provider'] == "energycharts_de"
     assert result[0]["carbon_intensity"] == 111
 
 
 @pytest.mark.asyncio
 async def test_get_primary_carbon_intensity_missing_primary_data(monkeypatch) -> None:
     """Primary endpoint raises 404 when primary provider has no data."""
-    app_module.config = _make_config(primary_provider="electricitymaps")
+    app_module.config = _make_config(primary_provider="energycharts")
 
     monkeypatch.setattr(
         app_module,
@@ -218,10 +218,10 @@ async def test_get_v3_carbon_intensity_history_uses_auth_token(monkeypatch) -> N
     """v3 history endpoint returns simulated data when auth-token provided."""
     captured = {}
 
-    async def fake_get_simulation_carbon(simulation_id, db):
-        captured["simulation_id"] = simulation_id
+    async def fake_get_simulation_carbon(simulationId, db):
+        captured["simulationId"] = simulationId
         captured["db"] = db
-        return {"simulation_id": simulation_id, "carbon_intensity": 77}
+        return {"simulationId": simulationId, "carbon_intensity": 77}
 
     monkeypatch.setattr(app_module, "get_simulation_carbon", fake_get_simulation_carbon)
 
@@ -231,7 +231,7 @@ async def test_get_v3_carbon_intensity_history_uses_auth_token(monkeypatch) -> N
     assert len(result["history"]) == 1
     assert result["history"][0]["carbonIntensity"] == 77.0
     assert result["history"][0]["createdAt"] == result["history"][0]["updatedAt"]
-    assert captured["simulation_id"] == "sim-2"
+    assert captured["simulationId"] == "sim-2"
     assert "db" in captured
 
 

@@ -28,29 +28,29 @@ def test_get_providers_follows_cron_sources(monkeypatch) -> None:
 
     providers = helpers.get_providers()
 
-    assert set(providers.keys()) == {"electricitymaps", "energycharts"}
-    assert isinstance(providers["electricitymaps"], helpers.ElectricityMapsProvider)
+    assert set(providers.keys()) == {"electricitymaps_de", "energycharts_fr"}
+    assert isinstance(providers["electricitymaps_de"], helpers.ElectricityMapsProvider)
 
 
 def test_get_providers_deduplicates_and_skips_unknown(monkeypatch) -> None:
     """Duplicate cron entries are collapsed and unknown providers ignored."""
     cfg = make_config(
         sources=[
-            Source(region="DE", provider="electricitymaps"),
-            Source(region="DE", provider="electricitymaps"),
+            Source(region="DE", provider="energycharts"),
+            Source(region="DE", provider="energycharts"),
         ]
     )
     monkeypatch.setattr(helpers, "config", cfg)
 
     providers = helpers.get_providers()
 
-    assert set(providers.keys()) == {"electricitymaps"}
+    assert set(providers.keys()) == {"energycharts_de"}
 
 def test_unknown_provider(monkeypatch) -> None:
     """Duplicate cron entries are collapsed and unknown providers ignored."""
     cfg = make_config(
         sources=[
-            Source(region="DE", provider="electricitymaps"),
+            Source(region="DE", provider="energycharts"),
             Source(region="DE", provider="unknown"),
         ]
     )

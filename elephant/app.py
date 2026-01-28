@@ -9,11 +9,12 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, HTTPException, Query, Depends, Header
 from fastapi.concurrency import run_in_threadpool
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from psycopg import Connection
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from elephant.config import load_config, Config
+from elephant.config import Config, config as app_config
 from elephant.database import connection_dependency, fetch_between, fetch_latest, fetch_regions
 from elephant.cron import run_cron
 from elephant.providers.helpers import get_providers
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 INDEX_HTML = (Path(__file__).resolve().parent / "templates" / "index.html").read_text(encoding="utf-8")
 
 # Global configuration and providers
-config: Optional[Config] = None
+config: Config = app_config
 
 EMISSION_FACTOR_TYPE = "lifecycle"
 TEMPORAL_GRANULARITY = "notimplemented"  # Placeholder until we support variable granularities
@@ -59,11 +60,7 @@ def _get_primary_source(region: str) -> str:
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager."""
-    global config  # pylint: disable=global-statement
-
     try:
-        config = load_config()
-
         # Configure logging
         log_level = config.logging.level.upper()  # pylint: disable=no-member
         logging.basicConfig(level=getattr(logging, log_level))
@@ -87,6 +84,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+if config.cors.allow_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=config.cors.allow_origins,
+        allow_credentials=config.cors.allow_credentials,
+        allow_methods=config.cors.allow_methods,
+        allow_headers=config.cors.allow_headers,
+    )
+
 
 class SimulationCreateRequest(BaseModel):
     """Payload for creating a new simulation."""
@@ -96,6 +102,28 @@ class SimulationCreateRequest(BaseModel):
         min_length=1,
         description="Ordered grid intensity values to replay. Accepts floats or (value, calls) tuples.",
     )
+
+    @field_validator("carbon_values")
+    @classmethod
+    def _validate_uniform_carbon_values(cls, values: List[SimulationValueInput]) -> List[SimulationValueInput]:
+        def _is_pair(entry: SimulationValueInput) -> bool:
+            return isinstance(entry, (list, tuple))
+
+        if not values:
+            return values
+
+        has_pairs = any(_is_pair(entry) for entry in values)
+        has_scalars = any(not _is_pair(entry) for entry in values)
+
+        if has_pairs and has_scalars:
+            raise ValueError("carbon_values must be all numbers or all (value, calls) pairs")
+
+        if has_pairs:
+            for entry in values:
+                if len(entry) != 2:
+                    raise ValueError("Each (value, calls) entry must have exactly 2 items")
+
+        return values
 
 
 @app.exception_handler(ValueError)
@@ -174,13 +202,13 @@ def _format_em_history_entry(record: dict) -> Dict[str, Any]:
 @app.get("/carbon-intensity/current")
 async def get_current_carbon_intensity(
     region: Annotated[Optional[str], Query(description="Country code (e.g., 'DE', 'US', 'FR')")] = None,
-    simulation_id: Annotated[Optional[str], Query(description="Simulation identifier")] = None,
+    simulationId: Annotated[Optional[str], Query(description="Simulation identifier")] = None,
     update: Annotated[bool, Query(description="If true, fetch fresh data before returning results")] = False,
     db: Connection = Depends(connection_dependency)) -> List[dict]:
     """Get current carbon grid intensity for a region or a simulation response."""
 
-    if simulation_id:
-        return await get_simulation_carbon(simulation_id=simulation_id, db=db)
+    if simulationId:
+        return await get_simulation_carbon(simulationId=simulationId, db=db)
 
     region = _normalize_region(region)
 
@@ -201,14 +229,14 @@ async def get_current_carbon_intensity(
 @app.get("/carbon-intensity/current/primary")
 async def get_primary_carbon_intensity(
     region: Annotated[str, Query(..., description="Country code (e.g., 'DE', 'US', 'FR')")],
-    simulation_id: Annotated[Optional[str], Query(description="Simulation identifier")] = None,
+    simulationId: Annotated[Optional[str], Query(description="Simulation identifier")] = None,
     update: Annotated[bool, Query(description="If true, fetch fresh data before returning results.")] = False,
     db: Connection = Depends(connection_dependency),
 ) -> List[dict]:
     """Get current carbon grid intensity for the configured primary provider for the region."""
 
-    if simulation_id:
-        return await get_simulation_carbon(simulation_id=simulation_id, db=db)
+    if simulationId:
+        return await get_simulation_carbon(simulationId=simulationId, db=db)
 
     region = _normalize_region(region)
 
@@ -235,13 +263,13 @@ async def get_carbon_intensity_history(
     endTime: Annotated[str, Query(..., description="End time in ISO 8601 format (e.g., '2025-09-22T12:00:00Z')")],
     provider: Annotated[Optional[str], Query(description="Optional filter by a provider")] = None,
     update: Annotated[bool|str, Query(description="If true, fetch fresh data before returning results. If string updates only that provider")] = False,
-    simulation_id: Annotated[Optional[str], Query(description="Simulation identifier")] = None,
+    simulationId: Annotated[Optional[str], Query(description="Simulation identifier")] = None,
     db: Connection = Depends(connection_dependency)
 ) -> List[dict]:
     """Get historical carbon grid intensity for a region and time range."""
 
-    if simulation_id:
-        return await simulation_stats(simulation_id=simulation_id, db=db)
+    if simulationId:
+        return await simulation_stats(simulationId=simulationId, db=db)
 
     if not startTime:
         raise HTTPException(status_code=400, detail="startTime parameter is required")
@@ -280,51 +308,51 @@ async def create_simulation(
 ) -> dict:
     """Register a new simulation run with grid intensity values (optionally with per-value call counts)."""
     try:
-        simulation_id = simulation_store.create(payload.carbon_values, conn=db)
+        simulationId = simulation_store.create(payload.carbon_values, conn=db)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return {"simulation_id": simulation_id}
+    return {"simulationId": simulationId}
 
 
-@app.get("/simulation/get_carbon")
+@app.get("/simulation/get-carbon")
 async def get_simulation_carbon(
-    simulation_id: Annotated[str, Query(..., description="Simulation identifier")],
+    simulationId: Annotated[str, Query(..., description="Simulation identifier")],
     db: Connection = Depends(connection_dependency),
 ) -> dict:
     """Return the current simulated carbon intensity value (auto-advancing when call thresholds are met)."""
     try:
-        value = simulation_store.current_value(simulation_id, conn=db)
+        value = simulation_store.current_value(simulationId, conn=db)
     except SimulationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    return {"simulation_id": simulation_id, "carbon_intensity": value}
+    return {"simulationId": simulationId, "carbon_intensity": value}
 
 
 @app.post("/simulation/next")
 async def advance_simulation(
-    simulation_id: Annotated[str, Query(..., description="Simulation identifier")],
+    simulationId: Annotated[str, Query(..., description="Simulation identifier")],
     db: Connection = Depends(connection_dependency),
 ) -> dict:
     """Advance a simulation to its next value."""
     try:
-        value = simulation_store.advance(simulation_id, conn=db)
+        value = simulation_store.advance(simulationId, conn=db)
     except SimulationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SimulationExhaustedError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    return {"simulation_id": simulation_id, "carbon_intensity": value}
+    return {"simulationId": simulationId, "carbon_intensity": value}
 
 
 @app.get("/simulation/stats")
 async def simulation_stats(
-    simulation_id: Annotated[str, Query(..., description="Simulation identifier")],
+    simulationId: Annotated[str, Query(..., description="Simulation identifier")],
     db: Connection = Depends(connection_dependency),
 ) -> dict:
     """Return call history for a simulation."""
     try:
-        return simulation_store.stats(simulation_id, conn=db)
+        return simulation_store.stats(simulationId, conn=db)
     except SimulationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -342,7 +370,7 @@ async def get_v3_carbon_intensity_current(
     normalized_zone = _normalize_region(zone)
 
     if auth_token:
-        sim_result = await get_simulation_carbon(simulation_id=auth_token, db=db)
+        sim_result = await get_simulation_carbon(simulationId=auth_token, db=db)
         return _format_em_current(normalized_zone, sim_result["carbon_intensity"])
 
     primary_result = get_primary_carbon_intensity(region=normalized_zone, update=False, db=db)
@@ -364,7 +392,7 @@ async def get_v3_carbon_intensity_history(
     normalized_zone = _normalize_region(zone)
 
     if auth_token:
-        sim_result = await get_simulation_carbon(simulation_id=auth_token, db=db)
+        sim_result = await get_simulation_carbon(simulationId=auth_token, db=db)
         now = datetime.now(timezone.utc)
         history_records = [
             {
@@ -397,6 +425,16 @@ async def index() -> HTMLResponse:
 async def list_regions(db: Connection = Depends(connection_dependency)) -> list[str]:
     """Return all regions with stored data."""
     return fetch_regions(db)
+
+@app.get("/providers")
+async def list_providers(db: Connection = Depends(connection_dependency)) -> list[tuple[str, str, str]]:
+    #!pylint: disable=unused-argument
+    """Return all providers with stored data."""
+    return [
+        (source.provider.lower(), source.region.upper(), f"{source.provider.lower()}_{source.region.lower()}")
+        for source in config.cron.sources
+    ]
+
 
 #pylint: disable=broad-exception-caught
 @app.get("/health")

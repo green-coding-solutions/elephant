@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 import pytest
+from pydantic import ValidationError
 from fastapi import HTTPException
 
 from elephant import app as app_module
@@ -123,6 +124,34 @@ def conn():
     app_module.simulation_store.reset(conn=connection)
 
 
+def test_simulation_create_request_accepts_all_scalars() -> None:
+    """Payload accepts all-scalar carbon_values."""
+    payload = {"carbon_values": [0, 10, 20]}
+    model = SimulationCreateRequest.model_validate(payload)
+    assert model.carbon_values == [0, 10, 20]
+
+
+def test_simulation_create_request_accepts_all_pairs() -> None:
+    """Payload accepts all (value, calls) pairs."""
+    payload = {"carbon_values": [[0, None], [10, 2], [20, 1]]}
+    model = SimulationCreateRequest.model_validate(payload)
+    assert model.carbon_values == [(0, None), (10, 2), (20, 1)]
+
+
+def test_simulation_create_request_rejects_mixed_types() -> None:
+    """Payload rejects mixed scalar and pair values."""
+    payload = {"carbon_values": [0, [300, 400]]}
+    with pytest.raises(ValidationError, match="carbon_values must be all numbers or all \\(value, calls\\) pairs"):
+        SimulationCreateRequest.model_validate(payload)
+
+
+def test_simulation_create_request_rejects_bad_pair_length() -> None:
+    """Payload rejects pairs that are not length 2."""
+    payload = {"carbon_values": [[1, 2, 3]]}
+    with pytest.raises(ValidationError, match="should have at most 2 items"):
+        SimulationCreateRequest.model_validate(payload)
+
+
 @pytest.mark.asyncio
 async def test_simulation_flow_advances_values(monkeypatch, conn) -> None:
     """Simulation endpoints return values in order and track stats."""
@@ -131,33 +160,33 @@ async def test_simulation_flow_advances_values(monkeypatch, conn) -> None:
 
     payload = SimulationCreateRequest(carbon_values=[5, 10, 15])
     create_response = await create_simulation(payload, db=conn)
-    simulation_id = create_response["simulation_id"]
+    simulationId = create_response["simulationId"]
 
-    assert conn.sim_runs[simulation_id]["calls"] == [None, None, None]
+    assert conn.sim_runs[simulationId]["calls"] == [None, None, None]
 
-    first = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    first = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert first["carbon_intensity"] == 5.0
 
-    first = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    first = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert first["carbon_intensity"] == 5.0
 
-    first = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    first = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert first["carbon_intensity"] == 5.0
 
-    next_value = await advance_simulation(simulation_id=simulation_id, db=conn)
+    next_value = await advance_simulation(simulationId=simulationId, db=conn)
     assert next_value["carbon_intensity"] == 10.0
 
-    current_after_advance = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    current_after_advance = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert current_after_advance["carbon_intensity"] == 10.0
 
-    current_after_advance = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    current_after_advance = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert current_after_advance["carbon_intensity"] == 10.0
 
-    next_value = await advance_simulation(simulation_id=simulation_id, db=conn)
+    next_value = await advance_simulation(simulationId=simulationId, db=conn)
     assert next_value["carbon_intensity"] == 15.0
 
 
-    stats = await simulation_stats(simulation_id=simulation_id, db=conn)
+    stats = await simulation_stats(simulationId=simulationId, db=conn)
 
     assert len(stats) == 3
     assert stats[0]['time'] == fixed_time.isoformat()
@@ -171,35 +200,35 @@ async def test_simulation_flow_advances_values_tuple(monkeypatch, conn) -> None:
     fixed_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
     monkeypatch.setattr(app_module.simulation_store, "_time_provider", lambda: fixed_time)
 
-    payload = SimulationCreateRequest(carbon_values=[5, (10,2), 15])
+    payload = SimulationCreateRequest(carbon_values=[(5, None), (10, 2), (15, None)])
     create_response = await create_simulation(payload, db=conn)
-    simulation_id = create_response["simulation_id"]
+    simulationId = create_response["simulationId"]
 
-    assert conn.sim_runs[simulation_id]["calls"] == [None, 2, None]
+    assert conn.sim_runs[simulationId]["calls"] == [None, 2, None]
 
-    first = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    first = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert first["carbon_intensity"] == 5.0
 
-    first = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    first = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert first["carbon_intensity"] == 5.0
 
-    first = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    first = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert first["carbon_intensity"] == 5.0
 
-    next_value = await advance_simulation(simulation_id=simulation_id, db=conn)
+    next_value = await advance_simulation(simulationId=simulationId, db=conn)
     assert next_value["carbon_intensity"] == 10.0
 
-    current_after_advance = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    current_after_advance = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert current_after_advance["carbon_intensity"] == 10.0
 
-    current_after_advance = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    current_after_advance = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert current_after_advance["carbon_intensity"] == 10.0
 
-    current_after_advance = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    current_after_advance = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert current_after_advance["carbon_intensity"] == 15.0
 
 
-    stats = await simulation_stats(simulation_id=simulation_id, db=conn)
+    stats = await simulation_stats(simulationId=simulationId, db=conn)
     assert len(stats) == 3
     assert stats[0]['time'] == fixed_time.isoformat()
     assert stats[0]['carbon_intensity'] == 5.0
@@ -211,7 +240,7 @@ async def test_simulation_flow_advances_values_tuple(monkeypatch, conn) -> None:
 async def test_simulation_invalid_id_raises_not_found(conn) -> None:
     """Invalid simulation IDs return a 404 HTTPException."""
     with pytest.raises(HTTPException) as exc:
-        await get_simulation_carbon(simulation_id="missing", db=conn)
+        await get_simulation_carbon(simulationId="missing", db=conn)
 
     assert exc.value.status_code == 404
 
@@ -220,8 +249,8 @@ async def test_simulation_invalid_id_raises_not_found(conn) -> None:
 async def test_simulation_next_returns_same(conn) -> None:
     """Advancing past the end of the simulation always returns the last value."""
     create_response = await create_simulation(SimulationCreateRequest(carbon_values=[1]), db=conn)
-    simulation_id = create_response["simulation_id"]
-    current = await advance_simulation(simulation_id=simulation_id, db=conn)
+    simulationId = create_response["simulationId"]
+    current = await advance_simulation(simulationId=simulationId, db=conn)
     assert current["carbon_intensity"] == 1.0
 
 
@@ -229,19 +258,19 @@ async def test_simulation_next_returns_same(conn) -> None:
 async def test_simulation_persists_and_reads_from_db(conn) -> None:
     """Simulation endpoints write and read state through the DB connection."""
     create_response = await create_simulation(SimulationCreateRequest(carbon_values=[2, 4]), db=conn)
-    simulation_id = create_response["simulation_id"]
+    simulationId = create_response["simulationId"]
 
-    assert simulation_id in conn.sim_runs
-    assert conn.sim_runs[simulation_id]["current_index"] == 0
-    assert conn.sim_runs[simulation_id]["calls"] == [None, None]
+    assert simulationId in conn.sim_runs
+    assert conn.sim_runs[simulationId]["current_index"] == 0
+    assert conn.sim_runs[simulationId]["calls"] == [None, None]
 
-    await advance_simulation(simulation_id=simulation_id, db=conn)
-    assert conn.sim_runs[simulation_id]["current_index"] == 1
+    await advance_simulation(simulationId=simulationId, db=conn)
+    assert conn.sim_runs[simulationId]["current_index"] == 1
 
-    current = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    current = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert current["carbon_intensity"] == 4.0
 
-    stats = await simulation_stats(simulation_id=simulation_id, db=conn)
+    stats = await simulation_stats(simulationId=simulationId, db=conn)
     assert stats[0]["carbon_intensity"] == 2.0
     assert conn.commits >= 2
 
@@ -254,21 +283,21 @@ async def test_simulation_auto_advances_after_calls(monkeypatch, conn) -> None:
 
     payload = SimulationCreateRequest(carbon_values=[(5, 2), (10, 1)])
     create_response = await create_simulation(payload, db=conn)
-    simulation_id = create_response["simulation_id"]
+    simulationId = create_response["simulationId"]
 
-    first = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    first = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert first["carbon_intensity"] == 5.0
-    assert conn.sim_runs[simulation_id]["calls"][0] == 1
+    assert conn.sim_runs[simulationId]["calls"][0] == 1
 
-    second = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    second = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert second["carbon_intensity"] == 5.0
-    assert conn.sim_runs[simulation_id]["current_index"] == 1
+    assert conn.sim_runs[simulationId]["current_index"] == 1
 
-    third = await get_simulation_carbon(simulation_id=simulation_id, db=conn)
+    third = await get_simulation_carbon(simulationId=simulationId, db=conn)
     assert third["carbon_intensity"] == 10.0
-    assert conn.sim_runs[simulation_id]["calls"][1] == -1
+    assert conn.sim_runs[simulationId]["calls"][1] == -1
 
-    stats = await simulation_stats(simulation_id=simulation_id, db=conn)
+    stats = await simulation_stats(simulationId=simulationId, db=conn)
     assert len(stats) == 2
     assert stats[0]['time'] == fixed_time.isoformat()
     assert stats[0]['carbon_intensity'] == 5.0

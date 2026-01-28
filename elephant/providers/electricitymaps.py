@@ -24,7 +24,10 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
 
     def __init__(self, config: ProviderConfig):
         self.config = config
-        self.headers = {"auth-token": config.api_token} if config.api_token else {}
+        if not config.api_token:
+            raise ValueError("API token is required for ElectricityMapsProvider.")
+
+        self.headers = {"auth-token": config.api_token}
 
     def _get(self, path: str, params: dict) -> Response:
         """Perform a GET request with shared error handling."""
