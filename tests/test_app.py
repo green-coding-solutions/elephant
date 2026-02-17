@@ -24,7 +24,7 @@ def _make_config(primary_provider: str = "energycharts") -> Config:
     return Config(
         database=DatabaseConfig(url="postgresql://user:pass@localhost:5432/elephant"),
         cron=CronConfig(
-            interval_seconds=300,
+            run_cron_checker_seconds=300,
             sources=[
                 Source(region="DE", provider=primary_provider, primary=True),
                 Source(region="DE", provider="bundesnetzagentur", primary=False),

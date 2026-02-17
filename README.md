@@ -32,6 +32,7 @@ cp config.example.yml config.yml
 Edit `config.yml` and add API tokens per source in `cron.sources` (via `api_token`).
 If a source should skip historical fetches, set `only_get_current: true` on that source.
 You can also set `resolution` per source to override provider defaults (for example ElectricityMaps `5_minutes`).
+Set `update_iterval` (seconds) on a source to run it less frequently than the global cron loop (`run_cron_checker_seconds`).
 
 For ElectricityMaps: Replace "your-electricitymaps-api-token-here" with your actual token. You don't need to modify anything to start collection. We use free endpoints per default.
 

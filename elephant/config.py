@@ -33,6 +33,7 @@ class Source(BaseModel):
     provider: str
     api_token: Optional[str] = None
     resolution: Optional[str] = None
+    update_iterval: Optional[int] = Field(default=None, ge=1)
     only_get_current: bool = False
     primary: bool = False
 
@@ -40,7 +41,7 @@ class Source(BaseModel):
 class CronConfig(BaseModel):
     """Configuration for background polling."""
 
-    interval_seconds: int = Field(default=300, ge=1)
+    run_cron_checker_seconds: int = Field(default=300, ge=1)
     sources: list[Source] = Field(default_factory=list)
 
 

@@ -1,6 +1,7 @@
 import argparse
 import logging
 import signal
+from datetime import datetime, timedelta, timezone
 from threading import Event
 
 from elephant.database import db_connection
@@ -28,9 +29,40 @@ def wait_with_signal_check(total_seconds: int) -> bool:
     return shutdown_event.is_set()
 
 
+def _is_source_due(cur, source_name: str, update_interval_seconds: int | None, force_run: bool = False) -> bool:
+    """Return True when a source should run based on its configured interval."""
+    if force_run or not update_interval_seconds:
+        return True
+
+    cur.execute("SELECT last_run FROM last_cron_run WHERE source = %s;", (source_name,))
+    row = cur.fetchone()
+    if not row:
+        return True
+
+    last_run = row[0]
+    return datetime.now(tz=timezone.utc) >= last_run + timedelta(seconds=update_interval_seconds)
+
+
+def _touch_source_run(cur, source_name: str, run_time: datetime) -> None:
+    """Store the latest execution timestamp for a source."""
+
+    # We do an insert here as like this the first item will be created
+    # we then update if a source already exists.
+    cur.execute(
+        """
+        INSERT INTO last_cron_run (source, last_run)
+        VALUES (%s, %s)
+        ON CONFLICT (source)
+        DO UPDATE SET last_run = EXCLUDED.last_run;
+        """,
+        (source_name, run_time),
+    )
+
+
 def run_cron(specific_region=None, specific_provider=None) -> None:
     """Run a single cron iteration."""
     providers: dict[str, CarbonIntensityProvider] = get_providers()
+    force_run = specific_region is not None or specific_provider is not None
 
     with db_connection() as conn, conn.cursor() as cur:
         for source in config.cron.sources:
@@ -50,8 +82,16 @@ def run_cron(specific_region=None, specific_provider=None) -> None:
                 logger.warning("Provider '%s' for region '%s' is not configured or enabled.", provider_db_name, region)
                 continue
 
+            if not _is_source_due(cur, provider_db_name, source.update_iterval, force_run=force_run):
+                logger.debug(
+                    "Skipping '%s' due to update_iterval=%s seconds.",
+                    provider_db_name,
+                    source.update_iterval,
+                )
+                continue
 
             provider = providers[provider_db_name]
+            run_time = datetime.now(tz=timezone.utc)
 
             logger.debug("Fetching data for '%s' from '%s'.", region, provider_db_name)
 
@@ -68,6 +108,8 @@ def run_cron(specific_region=None, specific_provider=None) -> None:
 
             if not data:
                 logger.error("No data returned for '%s' from '%s'.", region, provider_db_name)
+                _touch_source_run(cur, provider_db_name, run_time)
+                conn.commit()
                 continue
 
             inserted_count = 0
@@ -102,6 +144,7 @@ def run_cron(specific_region=None, specific_provider=None) -> None:
                 if cur.rowcount and cur.rowcount > 0:
                     inserted_count += cur.rowcount
 
+            _touch_source_run(cur, provider_db_name, run_time)
             conn.commit()
 
             logger.info(
@@ -130,5 +173,5 @@ if __name__ == "__main__":
 
         while not shutdown_event.is_set():
             run_cron()
-            if wait_with_signal_check(config.cron.interval_seconds):
+            if wait_with_signal_check(config.cron.run_cron_checker_seconds):
                 break

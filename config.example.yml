@@ -7,25 +7,29 @@ database:
 
 # Cron job for fetching data
 cron:
-  interval_seconds: 300  # Default: 5 minutes
+  run_cron_checker_seconds: 300  # Default: 5 minutes
   sources:
     - region: "DE"
       provider: "bundesnetzagentur"
+      # update_iterval: 3600 # seconds
       primary: true # If you have multiple sources for the same region, one should be marked as primary so the api knows which to return by default
     - region: "DE"
       provider: "energycharts"
+      # update_iterval: 1800 # seconds
     # - region: "DE"
     #   provider: "bundesnetzagentur_all"
     # - region: "DE"
     #   provider: "electricitymaps"
     #   api_token: "YOUR TOKEN HERE"
     #   resolution: "5_minutes"
+    #   update_iterval: 3600 # every hour
     #   only_get_current: true
     #   primary: true
     # - region: "FR"
     #   provider: "electricitymaps"
     #   api_token: "YOUR TOKEN HERE"
     #   resolution: "5_minutes"
+    #   update_iterval: 3600 # every hour
     #   only_get_current: false
 
 # Logging

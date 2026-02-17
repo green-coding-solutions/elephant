@@ -1,6 +1,7 @@
 import logging
 import os
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Iterator, Generator
 
 import psycopg
@@ -10,6 +11,7 @@ from psycopg.rows import dict_row
 from elephant.config import config
 
 logger = logging.getLogger(__name__)
+MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 
 
 def _database_url() -> str:
@@ -63,6 +65,11 @@ def init_db() -> None:
       carbon_intensity  DOUBLE PRECISION NOT NULL,
       idx               INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS last_cron_run (
+      source    TEXT PRIMARY KEY,
+      last_run  TIMESTAMPTZ NOT NULL
+    );
     """
 
     with db_connection() as conn, conn.cursor() as cur:
@@ -70,7 +77,46 @@ def init_db() -> None:
         cur.execute("CREATE EXTENSION IF NOT EXISTS timescaledb;")
         cur.execute(ddl)
         conn.commit()
-        logger.info("Database ready.")
+    run_migrations()
+    logger.info("Database ready.")
+
+
+def run_migrations() -> None:
+    """Run unapplied SQL migrations from the migrations directory."""
+    if not MIGRATIONS_DIR.exists():
+        logger.info("No migrations directory found at %s. Skipping.", MIGRATIONS_DIR)
+        return
+
+    migration_files = sorted(MIGRATIONS_DIR.glob("*.sql"))
+    if not migration_files:
+        logger.info("No migration files found in %s. Skipping.", MIGRATIONS_DIR)
+        return
+
+    with db_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+              filename    TEXT PRIMARY KEY,
+              applied_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            """
+        )
+
+        cur.execute("SELECT filename FROM schema_migrations;")
+        applied = {row[0] for row in cur.fetchall()}
+
+        for migration_file in migration_files:
+            if migration_file.name in applied:
+                continue
+
+            logger.info("Applying migration %s", migration_file.name)
+            sql = migration_file.read_text(encoding="utf-8").strip()
+            if sql:
+                cur.execute(sql)
+
+            cur.execute("INSERT INTO schema_migrations (filename) VALUES (%s);", (migration_file.name,))
+
+        conn.commit()
 
 
 def fetch_latest(conn: Connection, region: str) -> dict[str, dict]:
