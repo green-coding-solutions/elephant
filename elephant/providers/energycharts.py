@@ -24,6 +24,7 @@ class EnergyChartsProvider(CarbonIntensityProvider):
 
     def __init__(self, config: ProviderConfig):
         self.config = config
+        self.resolution = config.resolution or RESOLUTION
 
     def _get(self, region: str) -> dict:
         """Perform a GET request with shared error handling."""
@@ -59,7 +60,7 @@ class EnergyChartsProvider(CarbonIntensityProvider):
                     "time": datetime.fromtimestamp(ts, tz=timezone.utc),
                     "carbon_intensity": value,
                     "provider": PROVIDER_NAME,
-                    "resolution": RESOLUTION,
+                    "resolution": self.resolution,
                     "estimation": idx >= len(co2eq) or co2eq[idx] is None,
                 }
             )

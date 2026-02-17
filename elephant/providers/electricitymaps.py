@@ -24,6 +24,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
 
     def __init__(self, config: ProviderConfig):
         self.config = config
+        self.resolution = config.resolution or RESOLUTION
         if not config.api_token:
             raise ValueError("API token is required for ElectricityMapsProvider.")
 
@@ -43,7 +44,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
     def get_current(self, region: str) -> List[dict]:
         """Get current carbon intensity for a region."""
         response = self._get("/v3/carbon-intensity/latest",
-                              params={"zone": region, "temporalGranularity": RESOLUTION})
+                              params={"zone": region, "temporalGranularity": self.resolution})
         data = response.json()
         item_time = datetime.fromisoformat(data["datetime"].replace("Z", "+00:00"))
         return [
@@ -52,7 +53,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                 "time": item_time,
                 "carbon_intensity": data["carbonIntensity"],
                 "provider": PROVIDER_NAME,
-                "resolution": RESOLUTION,
+                "resolution": self.resolution,
                 "estimation": data.get("isEstimated", False),
             }
         ]
@@ -70,7 +71,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                 "zone": region,
                 "start": start_time.isoformat(),
                 "end": end_time.isoformat(),
-                "temporalGranularity": RESOLUTION,
+                "temporalGranularity": self.resolution,
             },
         )
 
@@ -85,7 +86,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                     "time": item_time,
                     "carbon_intensity": item["carbonIntensity"],
                     "provider": PROVIDER_NAME,
-                    "resolution": RESOLUTION,
+                    "resolution": self.resolution,
                     "estimation": item.get("isEstimated", False),
                 }
             )
@@ -97,7 +98,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
             "/v3/carbon-intensity/forecast",
             params={
                 "zone": region,
-                "temporalGranularity": RESOLUTION,
+                "temporalGranularity": self.resolution,
             },
         )
 
@@ -110,7 +111,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                     "time": item_time,
                     "carbon_intensity": item["carbonIntensity"],
                     "provider": PROVIDER_NAME,
-                    "resolution": RESOLUTION,
+                    "resolution": self.resolution,
                     "estimation": True,
                 }
             )

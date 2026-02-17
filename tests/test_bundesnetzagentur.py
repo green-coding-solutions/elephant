@@ -8,7 +8,7 @@ from elephant.config import ProviderConfig
 
 def test_get_current_returns_expected_format():
     """Ensure Bundesnetzagentur provider returns a list of dicts with required keys."""
-    provider = BundesnetzagenturProvider(ProviderConfig(enabled=True))
+    provider = BundesnetzagenturProvider(ProviderConfig())
 
     result = provider.get_current("DE")
 

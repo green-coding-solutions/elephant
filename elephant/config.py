@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 import yaml
 from pydantic import BaseModel, Field
@@ -17,18 +17,25 @@ class ProviderConfig(BaseModel):
     """Configuration for a carbon intensity provider."""
 
     api_token: Optional[str] = None
+    resolution: Optional[str] = None
+
 
 class DatabaseConfig(BaseModel):
     """Configuration for the database."""
 
     url: str
 
+
 class Source(BaseModel):
     """Configuration for a region to fetch data for."""
 
     region: str
     provider: str
+    api_token: Optional[str] = None
+    resolution: Optional[str] = None
+    only_get_current: bool = False
     primary: bool = False
+
 
 class CronConfig(BaseModel):
     """Configuration for background polling."""
@@ -56,7 +63,6 @@ class Config(BaseModel):
     """Main configuration for Elephant service."""
 
     database: DatabaseConfig
-    providers: Dict[str, ProviderConfig] = Field(default_factory=dict)
     cron: CronConfig = Field(default_factory=CronConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     cors: CORSConfig = Field(default_factory=CORSConfig)

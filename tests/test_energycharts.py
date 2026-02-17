@@ -16,7 +16,7 @@ def _sample_response() -> dict:
 
 def test_get_historical_merges_forecast(monkeypatch) -> None:
     """Historical values include measured and forecast data."""
-    provider = EnergyChartsProvider(ProviderConfig(enabled=True))
+    provider = EnergyChartsProvider(ProviderConfig())
     monkeypatch.setattr(provider, "_get", lambda region: _sample_response())
 
     start = datetime.fromtimestamp(0, tz=timezone.utc)
@@ -32,7 +32,7 @@ def test_get_historical_merges_forecast(monkeypatch) -> None:
 
 def test_get_current_returns_latest(monkeypatch) -> None:
     """Current value returns the most recent timestamp."""
-    provider = EnergyChartsProvider(ProviderConfig(enabled=True))
+    provider = EnergyChartsProvider(ProviderConfig())
     monkeypatch.setattr(provider, "_get", lambda region: _sample_response())
 
     result = provider.get_current("DE")
@@ -40,3 +40,13 @@ def test_get_current_returns_latest(monkeypatch) -> None:
     assert len(result) == 1
     assert result[0]["time"] == datetime.fromtimestamp(3000, tz=timezone.utc)
     assert result[0]["carbon_intensity"] == 30.0
+
+
+def test_resolution_can_be_overridden(monkeypatch) -> None:
+    """Provider uses configured resolution in emitted entries."""
+    provider = EnergyChartsProvider(ProviderConfig(resolution="hourly"))
+    monkeypatch.setattr(provider, "_get", lambda region: _sample_response())
+
+    result = provider.get_current("DE")
+
+    assert result[0]["resolution"] == "hourly"

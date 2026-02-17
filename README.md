@@ -29,7 +29,9 @@ Before running Elephant, you need to configure your data providers:
 cp config.example.yml config.yml
 ```
 
-Edit config.yml and add your API tokens
+Edit `config.yml` and add API tokens per source in `cron.sources` (via `api_token`).
+If a source should skip historical fetches, set `only_get_current: true` on that source.
+You can also set `resolution` per source to override provider defaults (for example ElectricityMaps `5_minutes`).
 
 For ElectricityMaps: Replace "your-electricitymaps-api-token-here" with your actual token. You don't need to modify anything to start collection. We use free endpoints per default.
 
@@ -46,7 +48,7 @@ and that should set everythin up so that you can access Elephant under `http://l
 **Required for ElectricityMaps:**
 
 - Sign up at [ElectricityMaps](https://portal.electricitymaps.com/) to get an API token
-- Enable the `electricitymaps` provider and add your token in `config.yml`
+- Add a `cron.sources` entry with `provider: "electricitymaps"` and set its `api_token`
 
 ## Development
 You should be able to

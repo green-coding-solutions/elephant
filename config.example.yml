@@ -5,11 +5,6 @@
 database:
   url: "postgresql://user:password@localhost:5432/elephant"
 
-# Provider configuration
-providers:
-  electricitymaps:
-    api_token: "YOUR TOKEN HERE"
-
 # Cron job for fetching data
 cron:
   interval_seconds: 300  # Default: 5 minutes
@@ -23,9 +18,15 @@ cron:
     #   provider: "bundesnetzagentur_all"
     # - region: "DE"
     #   provider: "electricitymaps"
+    #   api_token: "YOUR TOKEN HERE"
+    #   resolution: "5_minutes"
+    #   only_get_current: true
     #   primary: true
     # - region: "FR"
     #   provider: "electricitymaps"
+    #   api_token: "YOUR TOKEN HERE"
+    #   resolution: "5_minutes"
+    #   only_get_current: false
 
 # Logging
 logging:

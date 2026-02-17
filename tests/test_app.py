@@ -16,17 +16,13 @@ from elephant.app import (
     health_check,
     index,
 )
-from elephant.config import Config, CronConfig, DatabaseConfig, LoggingConfig, ProviderConfig, Source
+from elephant.config import Config, CronConfig, DatabaseConfig, LoggingConfig, Source
 
 
 def _make_config(primary_provider: str = "energycharts") -> Config:
     """Helper to build a minimal Config for tests."""
     return Config(
         database=DatabaseConfig(url="postgresql://user:pass@localhost:5432/elephant"),
-        providers={
-            "energycharts": ProviderConfig(enabled=True),
-            "bundesnetzagentur": ProviderConfig(enabled=True),
-        },
         cron=CronConfig(
             interval_seconds=300,
             sources=[

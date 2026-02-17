@@ -38,7 +38,7 @@ def get_providers() -> dict[str, CarbonIntensityProvider]:
         if not factory:
             raise ValueError(f"Provider '{provider_name}' referenced in cron but no implementation is available.")
 
-        provider_config = config.providers.get(provider_name, ProviderConfig())
+        provider_config = ProviderConfig(api_token=source.api_token, resolution=source.resolution)
         providers[provider_name_reg] = factory(provider_config)
         seen.add(provider_name_reg)
         logger.debug("%s provider initialized", provider_name_reg)
