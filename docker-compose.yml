@@ -13,7 +13,7 @@ services:
     restart: unless-stopped
 
   db:
-    image: timescale/timescaledb-ha:pg18
+    image: timescale/timescaledb:2.25.1-pg18
     environment:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
