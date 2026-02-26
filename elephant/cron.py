@@ -4,10 +4,13 @@ import signal
 from datetime import datetime, timedelta, timezone
 from threading import Event
 
+from fastapi import HTTPException
+
 from elephant.database import db_connection
 from elephant.config import config
 from elephant.providers.helpers import get_providers
 from elephant.providers.base import CarbonIntensityProvider
+
 
 logging.basicConfig(level=config.logging.level)
 logger = logging.getLogger(__name__)
@@ -97,12 +100,16 @@ def run_cron(specific_region=None, specific_provider=None) -> None:
 
             # We have the update logic here and not in the provider as I
             # want to keep providers decoupled and focused on data retrieval only.
-            if source.only_get_current:
-                past = provider.get_current(region) or []
-                future = []
-            else:
-                past = provider.get_historical(region) or []
-                future = provider.get_future(region) or []
+            try:
+                if source.only_get_current:
+                    past = provider.get_current(region) or []
+                    future = []
+                else:
+                    past = provider.get_historical(region) or []
+                    future = provider.get_future(region) or []
+            except HTTPException:
+                logger.error('Fetch failed with an exception. Skipping this round')
+                past = future = []
 
             data = past + future # For now we merge the two. This will change in the future when modelling becomes more important
 
