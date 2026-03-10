@@ -48,11 +48,16 @@
         const ctx = document.getElementById("chart").getContext("2d");
         let chart;
 
+        function toLocalInputValue(date) {
+            const offset = date.getTimezoneOffset() * 60000;
+            return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+        }
+
         function setDefaults() {
             const end = new Date();
             const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
-            document.getElementById("startTime").value = start.toISOString().slice(0,16);
-            document.getElementById("endTime").value = end.toISOString().slice(0,16);
+            document.getElementById("startTime").value = toLocalInputValue(start);
+            document.getElementById("endTime").value = toLocalInputValue(end);
         }
 
         function showStatus(message, type = "info") {
