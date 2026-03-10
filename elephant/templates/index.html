@@ -167,8 +167,8 @@
                 const region = (regionSelect.value || "").trim().toUpperCase();
                 const start = document.getElementById("startTime").value;
                 const end = document.getElementById("endTime").value;
-                if (!region || region.length !== 2) {
-                    showStatus("Please provide a two-letter region code (e.g., DE, US).", "warning");
+                if (!region || region.length < 2) {
+                    showStatus("Please provide a valid region code (e.g., DE, US, NO-NO2).", "warning");
                     toggleLoading(false);
                     return;
                 }

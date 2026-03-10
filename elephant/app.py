@@ -2,6 +2,7 @@
 
 import inspect
 import logging
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Optional, Any, AsyncGenerator, Dict, List
@@ -137,10 +138,10 @@ def _normalize_region(region: Optional[str]) -> str:
     if not region:
         raise HTTPException(status_code=400, detail="region parameter is required")
 
-    if len(region) != 2 or not region.isalpha():
+    if not re.match(r'^[A-Za-z]{2}([A-Za-z0-9-]*)?$', region):
         raise HTTPException(
             status_code=400,
-            detail="region must be a valid ISO 3166-1 alpha-2 country code (e.g., 'DE', 'US')",
+            detail="region must be a valid region code (e.g., 'DE', 'US', 'NO-NO2')",
         )
 
     return region.upper()
