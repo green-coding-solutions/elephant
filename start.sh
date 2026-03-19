@@ -4,8 +4,12 @@ set -euo pipefail
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8085}"
 
-# Initialize database
+
+echo "Initialize database"
 python -m elephant.database
+
+echo "Ensuring yearly data is imported"
+python -m elephant.import_yearly
 
 # Start cron service in background
 python -m elephant.cron --service &

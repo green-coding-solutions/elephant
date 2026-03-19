@@ -71,8 +71,11 @@ and then run the commands on your development machine
 ```bash
 python3 -m elephant.database
 python3 -m elephant.cron
+python3 -m elephant.import_yearly
 python3 -m elephant --host 0.0.0.0 --port 8085
 ```
+
+The bundled yearly fallback dataset in `data/` can be imported with `python3 -m elephant.import_yearly` or `make import-yearly`. Imported fallback rows use the provider name `electrcitymaps_yearly`. Historical requests without timeseries coverage are expanded to synthetic 15-minute estimated values so existing clients and graphs keep working.
 
 ## API
 

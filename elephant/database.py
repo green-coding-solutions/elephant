@@ -1,6 +1,7 @@
 import logging
 import os
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator, Generator
 
@@ -119,7 +120,7 @@ def run_migrations() -> None:
         conn.commit()
 
 
-def fetch_latest(conn: Connection, region: str) -> dict[str, dict]:
+def fetch_latest(conn: Connection, region: str) -> list[dict]:
     """Return the most recent row for each provider at a region."""
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
@@ -132,10 +133,21 @@ def fetch_latest(conn: Connection, region: str) -> dict[str, dict]:
             (region,)
         )
 
-        return cur.fetchall()
+        rows = cur.fetchall()
+
+    if rows:
+        return rows
+
+    return _fetch_latest_yearly(conn, region)
 
 
-def fetch_between(conn: Connection, region: str, start_time, end_time, provider = None) -> list[dict]:
+def fetch_between(
+    conn: Connection,
+    region: str,
+    start_time: datetime,
+    end_time: datetime,
+    provider: str | None = None,
+) -> list[dict]:
     """Return rows within the requested window for a region, optionally filtered by provider."""
 
     query = """
@@ -155,21 +167,163 @@ def fetch_between(conn: Connection, region: str, start_time, end_time, provider 
 
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(query, params)
-        return cur.fetchall()
+        rows = cur.fetchall()
+
+    if rows:
+        return rows
+
+    return _fetch_between_yearly(conn, region, start_time, end_time, provider)
+
 
 def fetch_regions(conn: Connection) -> list[str]:
     """Return a list of distinct regions with data."""
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
-            SELECT DISTINCT region
-            FROM carbon
+            SELECT region
+            FROM (
+                SELECT DISTINCT region
+                FROM carbon
+                WHERE region IS NOT NULL
+
+                UNION
+
+                SELECT DISTINCT region
+                FROM carbon_yearly
+                WHERE region IS NOT NULL
+            ) AS regions
             WHERE region IS NOT NULL
             ORDER BY region;
             """
         )
         rows = cur.fetchall()
     return [row["region"] for row in rows if row.get("region")]
+
+
+def fetch_yearly_regions(conn: Connection) -> set[str]:
+    """Return regions that have yearly fallback data."""
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT region
+            FROM carbon_yearly
+            WHERE region IS NOT NULL
+            ORDER BY region;
+            """
+        )
+        rows = cur.fetchall()
+    return {row["region"] for row in rows if row.get("region")}
+
+
+def _fetch_latest_yearly(conn: Connection, region: str) -> list[dict]:
+    """Return the latest available yearly fallback entry for a region."""
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT year, provider, carbon_intensity::double precision, estimation
+            FROM carbon_yearly
+            WHERE region = %s
+            ORDER BY year DESC, provider ASC;
+            """,
+            (region,),
+        )
+        rows = cur.fetchall()
+
+    if not rows:
+        return []
+
+    latest_year = rows[0]["year"]
+    latest_time = _yearly_latest_timestamp(latest_year)
+
+    return [
+        {
+            "provider": row["provider"],
+            "time": latest_time,
+            "carbon_intensity": row["carbon_intensity"],
+            "estimation": row["estimation"],
+        }
+        for row in rows
+        if row["year"] == latest_year
+    ]
+
+
+def _fetch_between_yearly(
+    conn: Connection,
+    region: str,
+    start_time: datetime,
+    end_time: datetime,
+    provider: str | None = None,
+) -> list[dict]:
+    """Expand yearly fallback values into synthetic 15-minute rows for a requested range."""
+    yearly_rows = _fetch_yearly_rows(conn, region, start_time.year, end_time.year, provider)
+    if not yearly_rows:
+        return []
+
+    records_by_year: dict[int, list[dict]] = {}
+    for row in yearly_rows:
+        records_by_year.setdefault(row["year"], []).append(row)
+
+    current = _align_to_quarter_hour(start_time)
+    results: list[dict] = []
+
+    while current <= end_time:
+        for row in records_by_year.get(current.year, []):
+            results.append(
+                {
+                    "time": current,
+                    "carbon_intensity": row["carbon_intensity"],
+                    "provider": row["provider"],
+                    "estimation": row["estimation"],
+                }
+            )
+        current += timedelta(minutes=15)
+
+    return results
+
+
+def _fetch_yearly_rows(
+    conn: Connection,
+    region: str,
+    start_year: int,
+    end_year: int,
+    provider: str | None = None,
+) -> list[dict]:
+    """Fetch yearly fallback rows for a region and year range."""
+    query = """
+        SELECT year, carbon_intensity::double precision, provider, estimation
+        FROM carbon_yearly
+        WHERE region = %s
+          AND year >= %s
+          AND year <= %s
+    """
+    params = [region, start_year, end_year]
+
+    if provider:
+        query += "  AND provider = %s\n"
+        params.append(provider.lower())
+
+    query += "ORDER BY year ASC, provider ASC;"
+
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(query, params)
+        return cur.fetchall()
+
+
+def _align_to_quarter_hour(dt: datetime) -> datetime:
+    """Round a datetime up to the next 15-minute boundary."""
+    if dt.second == 0 and dt.microsecond == 0 and dt.minute % 15 == 0:
+        return dt
+
+    minute_offset = 15 - (dt.minute % 15)
+    aligned = dt + timedelta(minutes=minute_offset)
+    return aligned.replace(second=0, microsecond=0)
+
+
+def _yearly_latest_timestamp(year: int) -> datetime:
+    """Return a representative timestamp for the latest yearly fallback value."""
+    now = datetime.now(timezone.utc)
+    year_end = datetime(year, 12, 31, 23, 45, tzinfo=timezone.utc)
+    return min(now, year_end)
 
 
 if __name__ == "__main__":

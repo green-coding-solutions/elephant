@@ -1,4 +1,4 @@
-.PHONY: test lint run db cron commit
+.PHONY: test lint run db cron import-yearly commit
 
 VENV ?= venv
 PYTHON = $(VENV)/bin/python
@@ -17,5 +17,8 @@ db:
 
 cron:
 	$(PYTHON) -m elephant.cron
+
+import-yearly:
+	$(PYTHON) -m elephant.import_yearly
 
 commit: test lint

@@ -12,11 +12,13 @@ from elephant.app import (
     get_v3_carbon_intensity_current,
     get_v3_carbon_intensity_history,
     get_carbon_intensity_history,
+    list_region_details,
     list_regions,
     health_check,
     index,
 )
 from elephant.config import Config, CronConfig, DatabaseConfig, LoggingConfig, Source
+from elephant.yearly_dataset import YEARLY_PROVIDER
 
 
 def _make_config(primary_provider: str = "energycharts") -> Config:
@@ -49,6 +51,30 @@ async def test_list_regions(monkeypatch) -> None:
     monkeypatch.setattr(app_module, "fetch_regions", lambda db: ["DE", "FR"])
     regions = await list_regions(db=object())
     assert regions == ["DE", "FR"]
+
+
+@pytest.mark.asyncio
+async def test_list_region_details(monkeypatch) -> None:
+    """Region details endpoint includes dropdown labels with resolutions."""
+    monkeypatch.setattr(app_module, "fetch_regions", lambda db: ["DE", "FR"])
+    monkeypatch.setattr(app_module, "fetch_yearly_regions", lambda db: {"FR"})
+    app_module.config = Config(
+        database=DatabaseConfig(url="postgresql://user:pass@localhost:5432/elephant"),
+        cron=CronConfig(
+            run_cron_checker_seconds=300,
+            sources=[Source(region="DE", provider="energycharts", resolution="15_minutes")],
+        ),
+        logging=LoggingConfig(level="INFO"),
+    )
+
+    regions = await list_region_details(db=object())
+
+    assert regions[0].region == "DE"
+    assert regions[0].label == "DE (15 minutes)"
+    assert regions[0].resolutions == ["15 minutes"]
+    assert regions[1].region == "FR"
+    assert regions[1].label == "FR (yearly)"
+    assert regions[1].resolutions == ["yearly"]
 
 
 @pytest.mark.asyncio
@@ -101,7 +127,9 @@ async def test_get_v3_carbon_intensity_current_formats_primary(monkeypatch) -> N
     monkeypatch.setattr(
         app_module,
         "get_primary_carbon_intensity",
-        lambda region, update, db: {"primary": {"time": sample_time, "carbon_intensity": 111}},
+        lambda region, update, db: {
+            "primary": {"time": sample_time, "carbon_intensity": 111, "estimation": True}
+        },
     )
 
     result = await get_v3_carbon_intensity_current(zone="de", db=object())
@@ -111,6 +139,8 @@ async def test_get_v3_carbon_intensity_current_formats_primary(monkeypatch) -> N
     assert result["datetime"].endswith("Z")
     assert result["temporalGranularity"] == "notimplemented"
     assert result["emissionFactorType"] == "lifecycle"
+    assert result["isEstimated"] is True
+    assert result["estimationMethod"] == "yearly_fallback"
 
 
 @pytest.mark.asyncio
@@ -183,6 +213,30 @@ async def test_get_primary_carbon_intensity_missing_primary_data(monkeypatch) ->
 
 
 @pytest.mark.asyncio
+async def test_get_primary_carbon_intensity_falls_back_to_yearly_provider(monkeypatch) -> None:
+    """Primary endpoint uses the yearly fallback when no configured primary exists."""
+    app_module.config = Config(
+        database=DatabaseConfig(url="postgresql://user:pass@localhost:5432/elephant"),
+        cron=CronConfig(run_cron_checker_seconds=300, sources=[]),
+        logging=LoggingConfig(level="INFO"),
+    )
+
+    monkeypatch.setattr(
+        app_module,
+        "fetch_latest",
+        lambda db, region: [
+            {"provider": YEARLY_PROVIDER, "time": "t1", "carbon_intensity": 321, "estimation": True},
+        ],
+    )
+
+    result = await get_primary_carbon_intensity(region="BR", update=False, db=object())
+
+    assert len(result) == 1
+    assert result[0]["provider"] == YEARLY_PROVIDER
+    assert result[0]["carbon_intensity"] == 321
+
+
+@pytest.mark.asyncio
 async def test_get_v3_carbon_intensity_history_returns_last_24_hours(monkeypatch) -> None:
     """v3 history endpoint returns 24h window in EM format."""
     captured = {}
@@ -194,8 +248,8 @@ async def test_get_v3_carbon_intensity_history_returns_last_24_hours(monkeypatch
         captured["start"] = start
         captured["end"] = end
         return [
-            {"time": t1, "carbon_intensity": 100},
-            {"time": t2, "carbon_intensity": 200},
+            {"time": t1, "carbon_intensity": 100, "estimation": True},
+            {"time": t2, "carbon_intensity": 200, "estimation": True},
         ]
 
     monkeypatch.setattr(app_module, "fetch_between", fake_fetch_between)
@@ -207,6 +261,8 @@ async def test_get_v3_carbon_intensity_history_returns_last_24_hours(monkeypatch
     assert result["history"][0]["carbonIntensity"] == 100.0
     assert captured["end"] - captured["start"] == timedelta(hours=24)
     assert result["history"][0]["datetime"].endswith("Z")
+    assert result["history"][0]["isEstimated"] is True
+    assert result["history"][0]["estimationMethod"] == "yearly_fallback"
 
 
 @pytest.mark.asyncio

@@ -16,7 +16,7 @@ from psycopg import Connection
 from pydantic import BaseModel, Field, field_validator
 
 from elephant.config import Config, config as app_config
-from elephant.database import connection_dependency, fetch_between, fetch_latest, fetch_regions
+from elephant.database import connection_dependency, fetch_between, fetch_latest, fetch_regions, fetch_yearly_regions
 from elephant.cron import run_cron
 from elephant.providers.helpers import get_providers
 from elephant.simulation import (
@@ -25,6 +25,7 @@ from elephant.simulation import (
     SimulationValueInput,
     simulation_store,
 )
+from elephant.yearly_dataset import YEARLY_PROVIDER
 
 logger = logging.getLogger(__name__)
 INDEX_HTML = (Path(__file__).resolve().parent / "templates" / "index.html").read_text(encoding="utf-8")
@@ -127,6 +128,14 @@ class SimulationCreateRequest(BaseModel):
         return values
 
 
+class RegionOption(BaseModel):
+    """Metadata for rendering a region option in the UI."""
+
+    region: str
+    label: str
+    resolutions: List[str]
+
+
 @app.exception_handler(ValueError)
 async def value_error_handler(_: Any, exc: ValueError) -> JSONResponse:
     """Handle configuration validation errors."""
@@ -145,6 +154,20 @@ def _normalize_region(region: Optional[str]) -> str:
         )
 
     return region.upper()
+
+
+def _region_resolutions(region: str, yearly_regions: set[str]) -> list[str]:
+    """Return displayable resolutions for a region."""
+    resolutions = {
+        (source.resolution or "default").replace("_", " ")
+        for source in config.cron.sources
+        if source.region.upper() == region
+    }
+
+    if region in yearly_regions:
+        resolutions.add("yearly")
+
+    return sorted(resolutions)
 
 
 async def _handle_update(update: bool|str, region: str) -> None:
@@ -167,7 +190,12 @@ def _to_iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _format_em_current(zone: str, carbon_intensity: float, timestamp: datetime | None = None) -> Dict[str, Any]:
+def _format_em_current(
+    zone: str,
+    carbon_intensity: float,
+    timestamp: datetime | None = None,
+    estimation: bool = False,
+) -> Dict[str, Any]:
     """Format a single carbon intensity record in Electricity Maps style."""
     ts = _to_iso(timestamp or datetime.now(timezone.utc))
     return {
@@ -176,8 +204,8 @@ def _format_em_current(zone: str, carbon_intensity: float, timestamp: datetime |
         "datetime": ts,
         "updatedAt": ts,
         "emissionFactorType": EMISSION_FACTOR_TYPE,
-        "isEstimated": False,
-        "estimationMethod": None,
+        "isEstimated": estimation,
+        "estimationMethod": "yearly_fallback" if estimation else None,
         "temporalGranularity": TEMPORAL_GRANULARITY,
     }
 
@@ -185,14 +213,15 @@ def _format_em_current(zone: str, carbon_intensity: float, timestamp: datetime |
 def _format_em_history_entry(record: dict) -> Dict[str, Any]:
     """Format a history entry for Electricity Maps style responses."""
     ts = _to_iso(record["time"])
+    estimation = bool(record.get("estimation"))
     return {
         "carbonIntensity": float(record["carbon_intensity"]),
         "datetime": ts,
         "updatedAt": ts,
         "createdAt": ts,
         "emissionFactorType": EMISSION_FACTOR_TYPE,
-        "isEstimated": False,
-        "estimationMethod": None,
+        "isEstimated": estimation,
+        "estimationMethod": "yearly_fallback" if estimation else None,
     }
 
 
@@ -242,13 +271,21 @@ async def get_primary_carbon_intensity(
     region = _normalize_region(region)
 
     results = await get_current_carbon_intensity(region=region, update=update, db=db)
-    print(results)
 
-    primary_source = _get_primary_source(region)
+    try:
+        primary_source = _get_primary_source(region)
+    except HTTPException:
+        yearly_match = [entry for entry in results if entry.get("provider") == YEARLY_PROVIDER]
+        if yearly_match:
+            return yearly_match
+        raise
 
     matched = [key for key in results if key.get("provider") == primary_source]
 
     if not matched:
+        yearly_match = [entry for entry in results if entry.get("provider") == YEARLY_PROVIDER]
+        if yearly_match:
+            return yearly_match
         raise HTTPException(
             status_code=404,
             detail=f"No carbon intensity data available for primary provider '{primary_source}' in this region.",
@@ -380,7 +417,12 @@ async def get_v3_carbon_intensity_current(
     data = next(iter(primary.values()))
     timestamp = data.get("time") if isinstance(data, dict) else None
 
-    return _format_em_current(normalized_zone, data.get("carbon_intensity"), timestamp=timestamp)
+    return _format_em_current(
+        normalized_zone,
+        data.get("carbon_intensity"),
+        timestamp=timestamp,
+        estimation=bool(data.get("estimation")),
+    )
 
 
 @app.get("/v3/carbon-intensity/history")
@@ -426,6 +468,21 @@ async def index() -> HTMLResponse:
 async def list_regions(db: Connection = Depends(connection_dependency)) -> list[str]:
     """Return all regions with stored data."""
     return fetch_regions(db)
+
+
+@app.get("/regions/details")
+async def list_region_details(db: Connection = Depends(connection_dependency)) -> list[RegionOption]:
+    """Return region metadata for UI consumers."""
+    regions = fetch_regions(db)
+    yearly_regions = fetch_yearly_regions(db)
+
+    details = []
+    for region in regions:
+        resolutions = _region_resolutions(region, yearly_regions)
+        label = region if not resolutions else f"{region} ({', '.join(resolutions)})"
+        details.append(RegionOption(region=region, label=label, resolutions=resolutions))
+
+    return details
 
 @app.get("/providers")
 async def list_providers(db: Connection = Depends(connection_dependency)) -> list[tuple[str, str, str]]:

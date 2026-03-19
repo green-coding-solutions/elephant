@@ -75,7 +75,7 @@
         }
 
         async function fetchRegions() {
-            const response = await fetch("/regions");
+            const response = await fetch("/regions/details");
             if (!response.ok) {
                 const text = await response.text();
                 throw new Error(text || "Failed to fetch regions");
@@ -89,10 +89,12 @@
                 showStatus("No regions available. Run the cron to load data first.", "warning");
                 return null;
             }
-            regionSelect.innerHTML = regions.map((r) => `<option value="${r}">${r}</option>`).join("");
+            regionSelect.innerHTML = regions
+                .map((item) => `<option value="${item.region}">${item.label}</option>`)
+                .join("");
             $(regionSelect).dropdown("clear");
-            $(regionSelect).dropdown("set selected", regions[0]);
-            return regions[0];
+            $(regionSelect).dropdown("set selected", regions[0].region);
+            return regions[0].region;
         }
 
         function buildDatasets(rows) {
