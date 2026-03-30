@@ -43,6 +43,8 @@ async def test_index_returns_html() -> None:
     assert response.status_code == 200
     assert response.media_type == "text/html"
     assert b"<html" in response.body.lower()
+    assert b"First measurement:" in response.body
+    assert b"Last measurement:" in response.body
 
 
 @pytest.mark.asyncio
@@ -55,9 +57,23 @@ async def test_list_regions(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_list_region_details(monkeypatch) -> None:
-    """Region details endpoint includes dropdown labels with resolutions."""
+    """Region details endpoint returns structured range data for the frontend."""
     monkeypatch.setattr(app_module, "fetch_regions", lambda db: ["DE", "FR"])
     monkeypatch.setattr(app_module, "fetch_yearly_regions", lambda db: {"FR"})
+    monkeypatch.setattr(
+        app_module,
+        "fetch_region_measurement_ranges",
+        lambda db: {
+            "DE": {
+                "first_measurement": datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc),
+                "last_measurement": datetime(2024, 1, 31, 23, 45, tzinfo=timezone.utc),
+            },
+            "FR": {
+                "first_measurement": datetime(2020, 1, 1, 0, 0, tzinfo=timezone.utc),
+                "last_measurement": datetime(2023, 12, 31, 23, 45, tzinfo=timezone.utc),
+            },
+        },
+    )
     app_module.config = Config(
         database=DatabaseConfig(url="postgresql://user:pass@localhost:5432/elephant"),
         cron=CronConfig(
@@ -72,9 +88,13 @@ async def test_list_region_details(monkeypatch) -> None:
     assert regions[0].region == "DE"
     assert regions[0].label == "DE (15 minutes)"
     assert regions[0].resolutions == ["15 minutes"]
+    assert regions[0].first_measurement == "2024-01-01T00:00:00Z"
+    assert regions[0].last_measurement == "2024-01-31T23:45:00Z"
     assert regions[1].region == "FR"
     assert regions[1].label == "FR (yearly)"
     assert regions[1].resolutions == ["yearly"]
+    assert regions[1].first_measurement == "2020-01-01T00:00:00Z"
+    assert regions[1].last_measurement == "2023-12-31T23:45:00Z"
 
 
 @pytest.mark.asyncio
@@ -128,7 +148,7 @@ async def test_get_v3_carbon_intensity_current_formats_primary(monkeypatch) -> N
         app_module,
         "get_primary_carbon_intensity",
         lambda region, update, db: {
-            "primary": {"time": sample_time, "carbon_intensity": 111, "estimation": True}
+            "primary": {"time": sample_time, "carbon_intensity": 111, "estimated": True}
         },
     )
 
@@ -225,7 +245,7 @@ async def test_get_primary_carbon_intensity_falls_back_to_yearly_provider(monkey
         app_module,
         "fetch_latest",
         lambda db, region: [
-            {"provider": YEARLY_PROVIDER, "time": "t1", "carbon_intensity": 321, "estimation": True},
+            {"provider": YEARLY_PROVIDER, "time": "t1", "carbon_intensity": 321, "estimated": True},
         ],
     )
 
@@ -248,8 +268,8 @@ async def test_get_v3_carbon_intensity_history_returns_last_24_hours(monkeypatch
         captured["start"] = start
         captured["end"] = end
         return [
-            {"time": t1, "carbon_intensity": 100, "estimation": True},
-            {"time": t2, "carbon_intensity": 200, "estimation": True},
+            {"time": t1, "carbon_intensity": 100, "estimated": True},
+            {"time": t2, "carbon_intensity": 200, "estimated": True},
         ]
 
     monkeypatch.setattr(app_module, "fetch_between", fake_fetch_between)

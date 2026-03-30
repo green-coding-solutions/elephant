@@ -236,7 +236,7 @@ class SimulationStore:
                 'provider': simulation_id,
                 'time': call["called_at"].isoformat(),
                 'carbon_intensity': float(call["carbon_intensity"]),
-                'estimation': True,
+                'estimated': True,
              }
              for call in calls
         ]

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 def import_yearly_data(data_dir: Path = YEARLY_DATA_DIR) -> int:
     """Import bundled yearly data files into the yearly fallback table."""
-    records = list(iter_yearly_dataset_records(data_dir))
+    records = iter_yearly_dataset_records(data_dir)
     if not records:
         logger.warning("No yearly dataset records found in %s", data_dir)
         return 0
@@ -38,12 +38,11 @@ def import_yearly_data(data_dir: Path = YEARLY_DATA_DIR) -> int:
               region,
               carbon_intensity,
               provider,
-              estimation,
               zone_name,
               country_name,
               display_name
             )
-            VALUES (%(year)s, %(region)s, %(carbon_intensity)s, %(provider)s, %(estimation)s,
+            VALUES (%(year)s, %(region)s, %(carbon_intensity)s, %(provider)s,
                     %(zone_name)s, %(country_name)s, %(display_name)s)
             ON CONFLICT (year, region, provider)
             DO NOTHING;

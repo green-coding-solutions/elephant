@@ -35,10 +35,10 @@
             <button class="ui primary button" type="submit">Load data</button>
             <div class="ui inline loader" id="loader" style="display:none;"></div>
         </form>
+        <div class="ui message" id="status" style="display:none;"></div>
         <div id="chart-container" class="ui segment">
             <canvas id="chart"></canvas>
         </div>
-        <div class="ui message" id="status" style="display:none;"></div>
     </div>
 
     <script>
@@ -46,6 +46,7 @@
         const loaderEl = document.getElementById("loader");
         const regionSelect = document.getElementById("regionDropdown");
         const ctx = document.getElementById("chart").getContext("2d");
+        let regions = []; // We make this global so that we can show the dates on error
         let chart;
 
         function toLocalInputValue(date) {
@@ -74,6 +75,27 @@
             loaderEl.style.display = show ? "inline-block" : "none";
         }
 
+        function formatMeasurementTimestamp(timestamp) {
+            return new Date(timestamp).toLocaleString();
+        }
+
+        function buildRangeMessage(region, baseMessage) {
+            const regionDetails = regions.find((item) => item.region === region);
+            if (!regionDetails) {
+                return baseMessage;
+            }
+
+            const messageParts = [baseMessage];
+            if (regionDetails.first_measurement) {
+                messageParts.push(`First measurement: ${formatMeasurementTimestamp(regionDetails.first_measurement)}.`);
+            }
+            if (regionDetails.last_measurement) {
+                messageParts.push(`Last measurement: ${formatMeasurementTimestamp(regionDetails.last_measurement)}.`);
+            }
+
+            return messageParts.join(" ");
+        }
+
         async function fetchRegions() {
             const response = await fetch("/regions/details");
             if (!response.ok) {
@@ -84,7 +106,7 @@
         }
 
         async function initRegions() {
-            const regions = await fetchRegions();
+            regions = await fetchRegions();
             if (!regions || regions.length === 0) {
                 showStatus("No regions available. Run the cron to load data first.", "warning");
                 return null;
@@ -165,13 +187,14 @@
         }
 
         async function loadData(evt) {
+            renderChart([]); // Clear chart immediately to give feedback
+            const region = (regionSelect.value || "").trim().toUpperCase();
             if (evt) {
                 evt.preventDefault();
             }
             clearStatus();
             toggleLoading(true);
             try {
-                const region = (regionSelect.value || "").trim().toUpperCase();
                 const start = document.getElementById("startTime").value;
                 const end = document.getElementById("endTime").value;
                 if (!region || region.length < 2) {
@@ -181,12 +204,12 @@
                 }
                 const data = await fetchData(region, start, end);
                 if (!data || data.length === 0) {
-                    showStatus("No data found for the selected range.", "info");
+                    showStatus(buildRangeMessage(region, "No data found for the selected range."), "info");
                 } else {
                     renderChart(data);
                 }
             } catch (err) {
-                showStatus(err.message || "Error loading data.", "negative");
+                showStatus(buildRangeMessage(region, err.message || "Error loading data."), "negative");
             } finally {
                 toggleLoading(false);
             }
@@ -201,7 +224,7 @@
                 if (!firstRegion) {
                     return;
                 }
-                await loadData();
+                //await loadData();
             } catch (err) {
                 showStatus(err.message || "Failed to initialize page.", "negative");
             }

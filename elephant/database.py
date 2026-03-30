@@ -43,7 +43,7 @@ def init_db() -> None:
       region            TEXT              NOT NULL,
       carbon_intensity  DOUBLE PRECISION  NULL,
       provider          TEXT              NULL,
-      estimation        BOOLEAN           NOT NULL DEFAULT FALSE
+      estimated         BOOLEAN           NOT NULL DEFAULT FALSE
     )
     WITH (
       timescaledb.hypertable,
@@ -125,7 +125,7 @@ def fetch_latest(conn: Connection, region: str) -> list[dict]:
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
-            SELECT DISTINCT ON (provider) provider, time, carbon_intensity::double precision, estimation
+            SELECT DISTINCT ON (provider) provider, time, carbon_intensity::double precision, estimated
             FROM carbon
             WHERE region = %s
             ORDER BY provider, time DESC;
@@ -151,7 +151,7 @@ def fetch_between(
     """Return rows within the requested window for a region, optionally filtered by provider."""
 
     query = """
-        SELECT time, carbon_intensity::double precision, provider, estimation
+        SELECT time, carbon_intensity::double precision, provider, estimated
         FROM carbon
         WHERE region = %s
           AND time >= %s
@@ -184,20 +184,52 @@ def fetch_regions(conn: Connection) -> list[str]:
             FROM (
                 SELECT DISTINCT region
                 FROM carbon
-                WHERE region IS NOT NULL
 
                 UNION
 
                 SELECT DISTINCT region
                 FROM carbon_yearly
-                WHERE region IS NOT NULL
             ) AS regions
-            WHERE region IS NOT NULL
             ORDER BY region;
             """
         )
         rows = cur.fetchall()
-    return [row["region"] for row in rows if row.get("region")]
+    return [row["region"] for row in rows]
+
+
+def fetch_region_measurement_ranges(conn: Connection) -> dict[str, dict[str, datetime]]:
+    """Return the first and last available measurement timestamp for each region."""
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(
+            """
+            SELECT region, MIN(measured_at) AS first_measurement, MAX(measured_at) AS last_measurement
+            FROM (
+                SELECT region, time AS measured_at
+                FROM carbon
+
+                UNION ALL
+
+                SELECT region, make_timestamptz(year, 1, 1, 0, 0, 0, 'UTC') AS measured_at
+                FROM carbon_yearly
+
+                UNION ALL
+
+                SELECT region, LEAST(NOW(), make_timestamptz(year, 12, 31, 23, 45, 0, 'UTC')) AS measured_at
+                FROM carbon_yearly
+            ) AS measurements
+            GROUP BY region
+            ORDER BY region;
+            """
+        )
+        rows = cur.fetchall()
+
+    return {
+        row["region"]: {
+            "first_measurement": row["first_measurement"],
+            "last_measurement": row["last_measurement"],
+        }
+        for row in rows
+    }
 
 
 def fetch_yearly_regions(conn: Connection) -> set[str]:
@@ -207,12 +239,11 @@ def fetch_yearly_regions(conn: Connection) -> set[str]:
             """
             SELECT DISTINCT region
             FROM carbon_yearly
-            WHERE region IS NOT NULL
             ORDER BY region;
             """
         )
         rows = cur.fetchall()
-    return {row["region"] for row in rows if row.get("region")}
+    return {row["region"] for row in rows}
 
 
 def _fetch_latest_yearly(conn: Connection, region: str) -> list[dict]:
@@ -220,7 +251,7 @@ def _fetch_latest_yearly(conn: Connection, region: str) -> list[dict]:
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
-            SELECT year, provider, carbon_intensity::double precision, estimation
+            SELECT year, provider, carbon_intensity::double precision
             FROM carbon_yearly
             WHERE region = %s
             ORDER BY year DESC, provider ASC;
@@ -240,7 +271,7 @@ def _fetch_latest_yearly(conn: Connection, region: str) -> list[dict]:
             "provider": row["provider"],
             "time": latest_time,
             "carbon_intensity": row["carbon_intensity"],
-            "estimation": row["estimation"],
+            "estimated": True,
         }
         for row in rows
         if row["year"] == latest_year
@@ -273,7 +304,7 @@ def _fetch_between_yearly(
                     "time": current,
                     "carbon_intensity": row["carbon_intensity"],
                     "provider": row["provider"],
-                    "estimation": row["estimation"],
+                    "estimated": True,
                 }
             )
         current += timedelta(minutes=15)
@@ -290,7 +321,7 @@ def _fetch_yearly_rows(
 ) -> list[dict]:
     """Fetch yearly fallback rows for a region and year range."""
     query = """
-        SELECT year, carbon_intensity::double precision, provider, estimation
+        SELECT year, carbon_intensity::double precision, provider
         FROM carbon_yearly
         WHERE region = %s
           AND year >= %s

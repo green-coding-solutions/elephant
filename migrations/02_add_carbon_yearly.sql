@@ -3,7 +3,6 @@ CREATE TABLE IF NOT EXISTS carbon_yearly (
   region            TEXT              NOT NULL,
   carbon_intensity  DOUBLE PRECISION  NOT NULL,
   provider          TEXT              NOT NULL,
-  estimation        BOOLEAN           NOT NULL DEFAULT TRUE,
   zone_name         TEXT              NULL,
   country_name      TEXT              NULL,
   display_name      TEXT              NULL,

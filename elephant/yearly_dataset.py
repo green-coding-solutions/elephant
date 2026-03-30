@@ -3,11 +3,10 @@
 import json
 import re
 from pathlib import Path
-from typing import Iterator
 
 
 YEARLY_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-YEARLY_PROVIDER = "electrcitymaps_yearly"
+YEARLY_PROVIDER = "electricitymaps_yearly"
 _YEAR_PATTERN = re.compile(r"yearly_(\d{4})\.js$")
 _DATA_PATTERN = re.compile(r"export const data = (\{.*?\})\s*export const methodology =", re.DOTALL)
 
@@ -29,8 +28,10 @@ def load_yearly_file(path: Path) -> dict:
     return json.loads(match.group(1))
 
 
-def iter_yearly_dataset_records(data_dir: Path = YEARLY_DATA_DIR) -> Iterator[dict]:
-    """Yield yearly dataset rows ready for database insertion."""
+def iter_yearly_dataset_records(data_dir: Path = YEARLY_DATA_DIR) -> list[dict]:
+    """Returns yearly dataset rows ready for database insertion."""
+    retList = []
+
     for path in sorted(data_dir.glob("yearly_*.js")):
         year = extract_year_from_path(path)
         payload = load_yearly_file(path)
@@ -41,13 +42,13 @@ def iter_yearly_dataset_records(data_dir: Path = YEARLY_DATA_DIR) -> Iterator[di
             if carbon_intensity is None:
                 continue
 
-            yield {
+            retList.append({
                 "year": year,
                 "region": region.upper(),
                 "carbon_intensity": float(carbon_intensity),
                 "provider": YEARLY_PROVIDER,
-                "estimation": True,
                 "zone_name": zone.get("zoneName"),
                 "country_name": zone.get("countryName"),
                 "display_name": zone.get("displayName"),
-            }
+            })
+    return retList

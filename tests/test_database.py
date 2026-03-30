@@ -48,7 +48,7 @@ def test_fetch_between_uses_yearly_fallback_when_live_query_is_empty(monkeypatch
 
 def test_fetch_latest_uses_yearly_fallback_when_live_query_is_empty(monkeypatch) -> None:
     """fetch_latest delegates to yearly fallback when the timeseries table has no rows."""
-    sentinel = [{"provider": YEARLY_PROVIDER, "carbon_intensity": 123, "estimation": True}]
+    sentinel = [{"provider": YEARLY_PROVIDER, "carbon_intensity": 123, "estimated": True}]
     monkeypatch.setattr(database_module, "_fetch_latest_yearly", lambda *args, **kwargs: sentinel)
 
     result = database_module.fetch_latest(_DummyConnection([]), "DE")
@@ -62,8 +62,8 @@ def test_fetch_between_yearly_expands_15_minute_rows_across_years(monkeypatch) -
         database_module,
         "_fetch_yearly_rows",
         lambda *args, **kwargs: [
-            {"year": 2021, "carbon_intensity": 100.0, "provider": YEARLY_PROVIDER, "estimation": True},
-            {"year": 2022, "carbon_intensity": 200.0, "provider": YEARLY_PROVIDER, "estimation": True},
+            {"year": 2021, "carbon_intensity": 100.0, "provider": YEARLY_PROVIDER},
+            {"year": 2022, "carbon_intensity": 200.0, "provider": YEARLY_PROVIDER},
         ],
     )
 
@@ -83,4 +83,4 @@ def test_fetch_between_yearly_expands_15_minute_rows_across_years(monkeypatch) -
     ]
     assert [row["carbon_intensity"] for row in result] == [100.0, 100.0, 200.0, 200.0, 200.0]
     assert all(row["provider"] == YEARLY_PROVIDER for row in result)
-    assert all(row["estimation"] is True for row in result)
+    assert all(row["estimated"] is True for row in result)

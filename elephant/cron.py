@@ -122,12 +122,12 @@ def run_cron(specific_region=None, specific_provider=None) -> None:
             inserted_count = 0
             for d in data:
 
-                if set(d.keys()) != {"region", "time", "carbon_intensity", "provider", "resolution", "estimation"}:
+                if set(d.keys()) != {"region", "time", "carbon_intensity", "provider", "resolution", "estimated"}:
                     raise ValueError(f"Provider '{provider_db_name}' returned data with invalid keys: {set(d.keys())}")
 
                 cur.execute(
                     """
-                    INSERT INTO carbon (time, region, carbon_intensity, provider, estimation)
+                    INSERT INTO carbon (time, region, carbon_intensity, provider, estimated)
                     SELECT %s, %s,  %s, %s, %s
                     WHERE NOT EXISTS (
                         SELECT 1
@@ -142,7 +142,7 @@ def run_cron(specific_region=None, specific_provider=None) -> None:
                         d["region"],
                         d.get("carbon_intensity"),
                         provider_db_name,
-                        d["estimation"],
+                        d["estimated"],
                         d["time"],
                         d["region"],
                         provider_db_name,

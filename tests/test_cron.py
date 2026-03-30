@@ -70,7 +70,7 @@ class _CountingProvider:
                 "carbon_intensity": 100.0,
                 "provider": "energycharts",
                 "resolution": "15_minutes",
-                "estimation": False,
+                "estimated": False,
             }
         ]
 
@@ -83,7 +83,7 @@ class _CountingProvider:
                 "carbon_intensity": 95.0,
                 "provider": "energycharts",
                 "resolution": "15_minutes",
-                "estimation": False,
+                "estimated": False,
             }
         ]
 

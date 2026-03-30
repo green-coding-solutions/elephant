@@ -61,7 +61,7 @@ class EnergyChartsProvider(CarbonIntensityProvider):
                     "carbon_intensity": value,
                     "provider": PROVIDER_NAME,
                     "resolution": self.resolution,
-                    "estimation": idx >= len(co2eq) or co2eq[idx] is None,
+                    "estimated": idx >= len(co2eq) or co2eq[idx] is None,
                 }
             )
 
@@ -73,7 +73,7 @@ class EnergyChartsProvider(CarbonIntensityProvider):
         entries = self._build_entries(data, region.upper())
 
         entries = sorted(
-            (entry for entry in entries if not entry["estimation"]),
+            (entry for entry in entries if not entry["estimated"]),
             key=lambda entry: entry["time"],
         )
         if not entries:
@@ -97,7 +97,7 @@ class EnergyChartsProvider(CarbonIntensityProvider):
         data = self._get(region)
         entries = self._build_entries(data, region.upper())
 
-        entries = [entry for entry in entries if entry["estimation"]]
+        entries = [entry for entry in entries if entry["estimated"]]
 
         if not entries:
             raise HTTPException(status_code=404, detail="No EnergyCharts data available")

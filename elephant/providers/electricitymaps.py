@@ -54,7 +54,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                 "carbon_intensity": data["carbonIntensity"],
                 "provider": PROVIDER_NAME,
                 "resolution": self.resolution,
-                "estimation": data.get("isEstimated", False),
+                "estimated": data.get("isEstimated", False),
             }
         ]
 
@@ -87,7 +87,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                     "carbon_intensity": item["carbonIntensity"],
                     "provider": PROVIDER_NAME,
                     "resolution": self.resolution,
-                    "estimation": item.get("isEstimated", False),
+                    "estimated": item.get("isEstimated", False),
                 }
             )
         return all_data
@@ -112,7 +112,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
                     "carbon_intensity": item["carbonIntensity"],
                     "provider": PROVIDER_NAME,
                     "resolution": self.resolution,
-                    "estimation": True,
+                    "estimated": True,
                 }
             )
 

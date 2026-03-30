@@ -16,7 +16,14 @@ from psycopg import Connection
 from pydantic import BaseModel, Field, field_validator
 
 from elephant.config import Config, config as app_config
-from elephant.database import connection_dependency, fetch_between, fetch_latest, fetch_regions, fetch_yearly_regions
+from elephant.database import (
+    connection_dependency,
+    fetch_between,
+    fetch_latest,
+    fetch_region_measurement_ranges,
+    fetch_regions,
+    fetch_yearly_regions,
+)
 from elephant.cron import run_cron
 from elephant.providers.helpers import get_providers
 from elephant.simulation import (
@@ -134,6 +141,8 @@ class RegionOption(BaseModel):
     region: str
     label: str
     resolutions: List[str]
+    first_measurement: Optional[str] = None
+    last_measurement: Optional[str] = None
 
 
 @app.exception_handler(ValueError)
@@ -194,7 +203,7 @@ def _format_em_current(
     zone: str,
     carbon_intensity: float,
     timestamp: datetime | None = None,
-    estimation: bool = False,
+    estimated: bool = False,
 ) -> Dict[str, Any]:
     """Format a single carbon intensity record in Electricity Maps style."""
     ts = _to_iso(timestamp or datetime.now(timezone.utc))
@@ -204,8 +213,8 @@ def _format_em_current(
         "datetime": ts,
         "updatedAt": ts,
         "emissionFactorType": EMISSION_FACTOR_TYPE,
-        "isEstimated": estimation,
-        "estimationMethod": "yearly_fallback" if estimation else None,
+        "isEstimated": estimated,
+        "estimationMethod": "yearly_fallback" if estimated else None,
         "temporalGranularity": TEMPORAL_GRANULARITY,
     }
 
@@ -213,15 +222,15 @@ def _format_em_current(
 def _format_em_history_entry(record: dict) -> Dict[str, Any]:
     """Format a history entry for Electricity Maps style responses."""
     ts = _to_iso(record["time"])
-    estimation = bool(record.get("estimation"))
+    estimated = bool(record.get("estimated"))
     return {
         "carbonIntensity": float(record["carbon_intensity"]),
         "datetime": ts,
         "updatedAt": ts,
         "createdAt": ts,
         "emissionFactorType": EMISSION_FACTOR_TYPE,
-        "isEstimated": estimation,
-        "estimationMethod": "yearly_fallback" if estimation else None,
+        "isEstimated": estimated,
+        "estimationMethod": "yearly_fallback" if estimated else None,
     }
 
 
@@ -421,7 +430,7 @@ async def get_v3_carbon_intensity_current(
         normalized_zone,
         data.get("carbon_intensity"),
         timestamp=timestamp,
-        estimation=bool(data.get("estimation")),
+        estimated=bool(data.get("estimated")),
     )
 
 
@@ -475,12 +484,24 @@ async def list_region_details(db: Connection = Depends(connection_dependency)) -
     """Return region metadata for UI consumers."""
     regions = fetch_regions(db)
     yearly_regions = fetch_yearly_regions(db)
+    measurement_ranges = fetch_region_measurement_ranges(db)
 
     details = []
     for region in regions:
         resolutions = _region_resolutions(region, yearly_regions)
+        range_info = measurement_ranges.get(region, {})
+        first_measurement = range_info.get("first_measurement")
+        last_measurement = range_info.get("last_measurement")
         label = region if not resolutions else f"{region} ({', '.join(resolutions)})"
-        details.append(RegionOption(region=region, label=label, resolutions=resolutions))
+        details.append(
+            RegionOption(
+                region=region,
+                label=label,
+                resolutions=resolutions,
+                first_measurement=_to_iso(first_measurement) if first_measurement else None,
+                last_measurement=_to_iso(last_measurement) if last_measurement else None,
+            )
+        )
 
     return details
 
