@@ -21,6 +21,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --timeout 100 --retries 10 -r requirements.txt
 
 COPY elephant/ elephant/
+COPY migrations/ migrations/
 COPY start.sh .
 RUN chmod +x /app/start.sh
 
