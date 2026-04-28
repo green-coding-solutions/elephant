@@ -242,7 +242,6 @@ async def get_primary_carbon_intensity(
     region = _normalize_region(region)
 
     results = await get_current_carbon_intensity(region=region, update=update, db=db)
-    print(results)
 
     primary_source = _get_primary_source(region)
 
