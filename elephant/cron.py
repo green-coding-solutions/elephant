@@ -120,44 +120,74 @@ def run_cron(specific_region=None, specific_provider=None) -> None:
                 continue
 
             inserted_count = 0
+            overwritten_count = 0
             for d in data:
 
                 if set(d.keys()) != {"region", "time", "carbon_intensity", "provider", "resolution", "estimation"}:
                     raise ValueError(f"Provider '{provider_db_name}' returned data with invalid keys: {set(d.keys())}")
 
+                new_value = d.get("carbon_intensity")
+                new_estimation = d["estimation"]
+
                 cur.execute(
                     """
-                    INSERT INTO carbon (time, region, carbon_intensity, provider, estimation)
-                    SELECT %s, %s,  %s, %s, %s
-                    WHERE NOT EXISTS (
-                        SELECT 1
-                        FROM carbon
-                        WHERE time = %s
-                          AND region = %s
-                          AND provider = %s
-                    );
+                    SELECT carbon_intensity::double precision, estimation
+                    FROM carbon
+                    WHERE time = %s AND region = %s AND provider = %s;
+                    """,
+                    (d["time"], d["region"], provider_db_name),
+                )
+                existing = cur.fetchone()
+
+                if existing is None:
+                    cur.execute(
+                        """
+                        INSERT INTO carbon (time, region, carbon_intensity, provider, estimation)
+                        VALUES (%s, %s, %s, %s, %s);
+                        """,
+                        (d["time"], d["region"], new_value, provider_db_name, new_estimation),
+                    )
+                    inserted_count += 1
+                    continue
+
+                old_value, old_estimation = existing
+                if old_value == new_value and old_estimation == new_estimation:
+                    continue
+
+                cur.execute(
+                    """
+                    INSERT INTO carbon_overwrites
+                        (time, region, provider, old_value, new_value, old_estimation, new_estimation)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s);
                     """,
                     (
                         d["time"],
                         d["region"],
-                        d.get("carbon_intensity"),
                         provider_db_name,
-                        d["estimation"],
-                        d["time"],
-                        d["region"],
-                        provider_db_name,
+                        old_value,
+                        new_value,
+                        old_estimation,
+                        new_estimation,
                     ),
                 )
-                if cur.rowcount and cur.rowcount > 0:
-                    inserted_count += cur.rowcount
+                cur.execute(
+                    """
+                    UPDATE carbon
+                    SET carbon_intensity = %s, estimation = %s
+                    WHERE time = %s AND region = %s AND provider = %s;
+                    """,
+                    (new_value, new_estimation, d["time"], d["region"], provider_db_name),
+                )
+                overwritten_count += 1
 
             _touch_source_run(cur, provider_db_name, run_time)
             conn.commit()
 
             logger.info(
-                "Successfully received data (%s records, %s inserts) for '%s' from '%s'.",
+                "Successfully received data (%s records, %s inserts, %s overwrites) for '%s' from '%s'.",
                 len(data),
                 inserted_count,
+                overwritten_count,
                 region,
                 provider_db_name,
             )
