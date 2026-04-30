@@ -20,7 +20,7 @@ services:
       POSTGRES_DB: elephant
       NO_TS_TUNE: "true"
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:
