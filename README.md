@@ -51,6 +51,20 @@ and that should set everythin up so that you can access Elephant under `http://l
 - Sign up at [ElectricityMaps](https://portal.electricitymaps.com/) to get an API token
 - Add a `cron.sources` entry with `provider: "electricitymaps"` and set its `api_token`
 
+## Production Setup
+
+In production you typically need an SSL certificate to run Elephant.
+
+Here we recommend you to use an NGINX reverse proxy and use its SSL certificate handling. 
+Then bind the Elephant `app` container only to localhost.
+
+Change the `ports` directive from `8085:8085` to `127.0.0.1:8085:8085`.
+
+Be aware that this binds only to IPv4 on the localhost which you have to tell NGINX in the proxy_pass directive: `proxy_pass http://127.0.0.1:8085;`
+
+Binding to IPv6 is technically possible but often Docker does not run with IPv6 enabled and requests will not be forwarded correctly.
+
+
 ## Development
 You should be able to
 
