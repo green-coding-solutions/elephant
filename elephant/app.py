@@ -290,8 +290,11 @@ async def get_carbon_intensity_history(
             detail=f"Invalid datetime format. Use ISO 8601 format (e.g., '2025-09-22T10:00:00Z'): {str(e)}",
         ) from e
 
-    # Validate time range
-    if start_dt >= end_dt:
+    # This is so that the GMT does not error because of this when crashing
+    if start_dt == end_dt:
+        return []
+
+    if start_dt > end_dt:
         raise HTTPException(status_code=400, detail="startTime must be before endTime")
 
     # Query the database
