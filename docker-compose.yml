@@ -8,6 +8,8 @@ services:
       - DATABASE_URL=postgresql://user:password@db:5432/elephant
     volumes:
       - ./config.yml:/app/config.yml:ro
+      - ./elephant:/app/elephant:ro
+      - ./migrations:/app/migrations:ro
     ports:
       - "8085:8085"
     restart: unless-stopped
