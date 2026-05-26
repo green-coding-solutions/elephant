@@ -42,7 +42,7 @@ def connection_dependency_sync() -> Generator[Connection, None, None]:
 # --- Async connection pool (used by the web server) ---
 
 async def create_pool(min_size: int = 2, max_size: int = 10) -> None:
-    global _pool
+    global _pool  # pylint: disable=global-statement
     pool = AsyncConnectionPool(
         conninfo=_database_url(),
         min_size=min_size,
@@ -54,7 +54,7 @@ async def create_pool(min_size: int = 2, max_size: int = 10) -> None:
 
 
 async def close_pool() -> None:
-    global _pool
+    global _pool  # pylint: disable=global-statement
     if _pool:
         await _pool.close()
         _pool = None
