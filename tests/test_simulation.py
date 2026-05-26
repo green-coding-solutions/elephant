@@ -17,20 +17,20 @@ from elephant.app import (
 
 
 class FakeCursor:
-    """Minimal cursor stub to emulate psycopg for simulation tests."""
+    """Minimal async cursor stub to emulate psycopg for simulation tests."""
 
     def __init__(self, conn, row_factory=None):
         self.conn = conn
         self.row_factory = row_factory
         self._results = []
 
-    def __enter__(self):
+    async def __aenter__(self):
         return self
 
-    def __exit__(self, exc_type, exc, tb):
+    async def __aexit__(self, exc_type, exc, tb):
         return False
 
-    def execute(self, sql, params=None):
+    async def execute(self, sql, params=None):
         normalized = " ".join(sql.split()).lower()
         params = params or ()
 
@@ -86,18 +86,18 @@ class FakeCursor:
         else:
             raise NotImplementedError(f"SQL not supported: {sql}")
 
-    def fetchone(self):
+    async def fetchone(self):
         if not self._results:
             return None
         row = self._results[0]
         return dict(row) if isinstance(row, dict) else row
 
-    def fetchall(self):
+    async def fetchall(self):
         return [dict(row) if isinstance(row, dict) else row for row in self._results]
 
 
 class FakeConnection:
-    """Minimal connection stub to capture simulation persistence."""
+    """Minimal async connection stub to capture simulation persistence."""
 
     def __init__(self):
         self.sim_runs = {}
@@ -108,20 +108,17 @@ class FakeConnection:
     def cursor(self, row_factory=None):
         return FakeCursor(self, row_factory=row_factory)
 
-    def commit(self):
+    async def commit(self):
         self.commits += 1
 
-    def rollback(self):
+    async def rollback(self):
         self.rollbacks += 1
 
 
 @pytest.fixture
 def conn():
     """Fresh fake connection per test."""
-    connection = FakeConnection()
-    app_module.simulation_store.reset(conn=connection)
-    yield connection
-    app_module.simulation_store.reset(conn=connection)
+    yield FakeConnection()
 
 
 def test_simulation_create_request_accepts_all_scalars() -> None:

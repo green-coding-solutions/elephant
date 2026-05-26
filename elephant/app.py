@@ -12,11 +12,18 @@ from fastapi import FastAPI, HTTPException, Query, Depends, Header
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
-from psycopg import Connection
+from psycopg import AsyncConnection
 from pydantic import BaseModel, Field, field_validator
 
 from elephant.config import Config, config as app_config
-from elephant.database import connection_dependency, fetch_between, fetch_latest, fetch_regions
+from elephant.database import (
+    connection_dependency,
+    fetch_between,
+    fetch_latest,
+    fetch_regions,
+    create_pool,
+    close_pool,
+)
 from elephant.cron import run_cron
 from elephant.providers.helpers import get_providers
 from elephant.simulation import (
@@ -62,11 +69,10 @@ def _get_primary_source(region: str) -> str:
 async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager."""
     try:
-        # Configure logging
         log_level = config.logging.level.upper()  # pylint: disable=no-member
         logging.basicConfig(level=getattr(logging, log_level))
         logger.info("Starting %s", fastapi_app.title)
-
+        await create_pool()
         logger.info("Application startup complete")
         yield
 
@@ -75,6 +81,7 @@ async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None, None]:
         raise
 
     finally:
+        await close_pool()
         logger.info("Application shutdown complete")
 
 
@@ -147,7 +154,7 @@ def _normalize_region(region: Optional[str]) -> str:
     return region.upper()
 
 
-async def _handle_update(update: bool|str, region: str) -> None:
+async def _handle_update(update: bool | str, region: str) -> None:
     """Handle update logic for endpoints."""
 
     if update:
@@ -157,7 +164,6 @@ async def _handle_update(update: bool|str, region: str) -> None:
         elif isinstance(update, str):
             logger.info("Updating carbon intensity data for region '%s' and provider '%s'...", region, update)
             await run_in_threadpool(run_cron, specific_region=region, specific_provider=update)
-
 
 
 def _to_iso(dt: datetime) -> str:
@@ -205,7 +211,7 @@ async def get_current_carbon_intensity(
     region: Annotated[Optional[str], Query(description="Country code (e.g., 'DE', 'US', 'FR')")] = None,
     simulationId: Annotated[Optional[str], Query(description="Simulation identifier")] = None,
     update: Annotated[bool, Query(description="If true, fetch fresh data before returning results")] = False,
-    db: Connection = Depends(connection_dependency)) -> List[dict]:
+    db: AsyncConnection = Depends(connection_dependency)) -> List[dict]:
     """Get current carbon grid intensity for a region or a simulation response."""
 
     if simulationId:
@@ -215,8 +221,7 @@ async def get_current_carbon_intensity(
 
     await _handle_update(update, region)
 
-    # Query the database for the most recent entry
-    results = fetch_latest(db, region)
+    results = await fetch_latest(db, region)
 
     if results:
         return results
@@ -232,7 +237,7 @@ async def get_primary_carbon_intensity(
     region: Annotated[str, Query(..., description="Country code (e.g., 'DE', 'US', 'FR')")],
     simulationId: Annotated[Optional[str], Query(description="Simulation identifier")] = None,
     update: Annotated[bool, Query(description="If true, fetch fresh data before returning results.")] = False,
-    db: Connection = Depends(connection_dependency),
+    db: AsyncConnection = Depends(connection_dependency),
 ) -> List[dict]:
     """Get current carbon grid intensity for the configured primary provider for the region."""
 
@@ -262,9 +267,9 @@ async def get_carbon_intensity_history(
     startTime: Annotated[str, Query(..., description="Start time in ISO 8601 format (e.g., '2025-09-22T10:00:00Z')")],
     endTime: Annotated[str, Query(..., description="End time in ISO 8601 format (e.g., '2025-09-22T12:00:00Z')")],
     provider: Annotated[Optional[str], Query(description="Optional filter by a provider")] = None,
-    update: Annotated[bool|str, Query(description="If true, fetch fresh data before returning results. If string updates only that provider")] = False,
+    update: Annotated[bool | str, Query(description="If true, fetch fresh data before returning results. If string updates only that provider")] = False,
     simulationId: Annotated[Optional[str], Query(description="Simulation identifier")] = None,
-    db: Connection = Depends(connection_dependency)
+    db: AsyncConnection = Depends(connection_dependency)
 ) -> List[dict]:
     """Get historical carbon grid intensity for a region and time range."""
 
@@ -280,7 +285,6 @@ async def get_carbon_intensity_history(
     region = _normalize_region(region)
     await _handle_update(update, region)
 
-    # Parse datetime strings
     try:
         start_dt = datetime.fromisoformat(startTime.replace("Z", "+00:00"))
         end_dt = datetime.fromisoformat(endTime.replace("Z", "+00:00"))
@@ -297,8 +301,7 @@ async def get_carbon_intensity_history(
     if start_dt > end_dt:
         raise HTTPException(status_code=400, detail="startTime must be before endTime")
 
-    # Query the database
-    results = fetch_between(db, region, start_dt, end_dt, provider)
+    results = await fetch_between(db, region, start_dt, end_dt, provider)
 
     return results or []
 
@@ -307,11 +310,11 @@ async def get_carbon_intensity_history(
 #######################################################################################################################
 @app.post("/simulation")
 async def create_simulation(
-    payload: SimulationCreateRequest, db: Connection = Depends(connection_dependency)
+    payload: SimulationCreateRequest, db: AsyncConnection = Depends(connection_dependency)
 ) -> dict:
     """Register a new simulation run with grid intensity values (optionally with per-value call counts)."""
     try:
-        simulationId = simulation_store.create(payload.carbon_values, conn=db)
+        simulationId = await simulation_store.create(payload.carbon_values, conn=db)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -321,11 +324,11 @@ async def create_simulation(
 @app.get("/simulation/get-carbon")
 async def get_simulation_carbon(
     simulationId: Annotated[str, Query(..., description="Simulation identifier")],
-    db: Connection = Depends(connection_dependency),
+    db: AsyncConnection = Depends(connection_dependency),
 ) -> dict:
     """Return the current simulated carbon intensity value (auto-advancing when call thresholds are met)."""
     try:
-        value = simulation_store.current_value(simulationId, conn=db)
+        value = await simulation_store.current_value(simulationId, conn=db)
     except SimulationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -335,11 +338,11 @@ async def get_simulation_carbon(
 @app.post("/simulation/next")
 async def advance_simulation(
     simulationId: Annotated[str, Query(..., description="Simulation identifier")],
-    db: Connection = Depends(connection_dependency),
+    db: AsyncConnection = Depends(connection_dependency),
 ) -> dict:
     """Advance a simulation to its next value."""
     try:
-        value = simulation_store.advance(simulationId, conn=db)
+        value = await simulation_store.advance(simulationId, conn=db)
     except SimulationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SimulationExhaustedError as exc:
@@ -351,11 +354,11 @@ async def advance_simulation(
 @app.get("/simulation/stats")
 async def simulation_stats(
     simulationId: Annotated[str, Query(..., description="Simulation identifier")],
-    db: Connection = Depends(connection_dependency),
+    db: AsyncConnection = Depends(connection_dependency),
 ) -> dict:
     """Return call history for a simulation."""
     try:
-        return simulation_store.stats(simulationId, conn=db)
+        return await simulation_store.stats(simulationId, conn=db)
     except SimulationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -367,7 +370,7 @@ async def simulation_stats(
 async def get_v3_carbon_intensity_current(
     zone: Annotated[str, Query(..., description="Country code (e.g., 'DE', 'US', 'FR')")],
     auth_token: Annotated[Optional[str], Header(alias="auth-token")] = None,
-    db: Connection = Depends(connection_dependency),
+    db: AsyncConnection = Depends(connection_dependency),
 ) -> Dict[str, Any]:
     """Electricity Maps compatible current carbon intensity response."""
     normalized_zone = _normalize_region(zone)
@@ -377,7 +380,7 @@ async def get_v3_carbon_intensity_current(
         return _format_em_current(normalized_zone, sim_result["carbon_intensity"])
 
     primary_result = get_primary_carbon_intensity(region=normalized_zone, update=False, db=db)
-    primary = await primary_result if inspect.isawaitable(primary_result) else primary_result # We need to do this because of the monkeypatching in tests
+    primary = await primary_result if inspect.isawaitable(primary_result) else primary_result  # We need to do this because of the monkeypatching in tests
 
     data = next(iter(primary.values()))
     timestamp = data.get("time") if isinstance(data, dict) else None
@@ -389,7 +392,7 @@ async def get_v3_carbon_intensity_current(
 async def get_v3_carbon_intensity_history(
     zone: Annotated[str, Query(..., description="Country code (e.g., 'DE', 'US', 'FR')")],
     auth_token: Annotated[Optional[str], Header(alias="auth-token")] = None,
-    db: Connection = Depends(connection_dependency),
+    db: AsyncConnection = Depends(connection_dependency),
 ) -> Dict[str, Any]:
     """Electricity Maps compatible 24h history response."""
     normalized_zone = _normalize_region(zone)
@@ -406,7 +409,7 @@ async def get_v3_carbon_intensity_history(
     else:
         end = datetime.now(timezone.utc)
         start = end - timedelta(hours=24)
-        history_records = fetch_between(db, normalized_zone, start, end)
+        history_records = await fetch_between(db, normalized_zone, start, end)
 
     return {
         "zone": normalized_zone,
@@ -425,12 +428,12 @@ async def index() -> HTMLResponse:
     return HTMLResponse(INDEX_HTML)
 
 @app.get("/regions")
-async def list_regions(db: Connection = Depends(connection_dependency)) -> list[str]:
+async def list_regions(db: AsyncConnection = Depends(connection_dependency)) -> list[str]:
     """Return all regions with stored data."""
-    return fetch_regions(db)
+    return await fetch_regions(db)
 
 @app.get("/providers")
-async def list_providers(db: Connection = Depends(connection_dependency)) -> list[tuple[str, str, str]]:
+async def list_providers(db: AsyncConnection = Depends(connection_dependency)) -> list[tuple[str, str, str]]:
     #!pylint: disable=unused-argument
     """Return all providers with stored data."""
     return [
@@ -441,18 +444,18 @@ async def list_providers(db: Connection = Depends(connection_dependency)) -> lis
 
 #pylint: disable=broad-exception-caught
 @app.get("/health")
-async def health_check(db: Connection = Depends(connection_dependency)) -> dict:
+async def health_check(db: AsyncConnection = Depends(connection_dependency)) -> dict:
     """Health check endpoint."""
     providers = list(get_providers().keys())
 
     record_count = None
     try:
-        with db.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM carbon;")
-            row = cur.fetchone()
+        async with db.cursor() as cur:
+            await cur.execute("SELECT COUNT(*) FROM carbon;")
+            row = await cur.fetchone()
             record_count = row[0] if row else 0
     except Exception as exc:
         logger.warning("Health check database count failed: %s", exc)
         return {"status": "error", "details": "database query failed"}
 
-    return {"status": "healthy", "providers": providers, "db_records": record_count, "regions": fetch_regions(db)}
+    return {"status": "healthy", "providers": providers, "db_records": record_count, "regions": await fetch_regions(db)}

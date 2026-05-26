@@ -46,7 +46,8 @@ async def test_index_returns_html() -> None:
 @pytest.mark.asyncio
 async def test_list_regions(monkeypatch) -> None:
     """Regions endpoint returns DB regions."""
-    monkeypatch.setattr(app_module, "fetch_regions", lambda db: ["DE", "FR"])
+    async def fake_fetch_regions(db): return ["DE", "FR"]
+    monkeypatch.setattr(app_module, "fetch_regions", fake_fetch_regions)
     regions = await list_regions(db=object())
     assert regions == ["DE", "FR"]
 
@@ -54,7 +55,8 @@ async def test_list_regions(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_get_current_carbon_intensity_success(monkeypatch) -> None:
     """Current endpoint returns latest data."""
-    monkeypatch.setattr(app_module, "fetch_latest", lambda db, region: {"provider": {"carbon_intensity": 123}})
+    async def fake_fetch_latest(db, region): return {"provider": {"carbon_intensity": 123}}
+    monkeypatch.setattr(app_module, "fetch_latest", fake_fetch_latest)
     result = await get_current_carbon_intensity(region="DE", update=False, db=object())
     assert result["provider"]["carbon_intensity"] == 123
 
@@ -69,7 +71,9 @@ async def test_get_current_carbon_intensity_triggers_update(monkeypatch) -> None
         return None
 
     monkeypatch.setattr(app_module, "run_in_threadpool", fake_run_in_threadpool)
-    monkeypatch.setattr(app_module, "fetch_latest", lambda db, region: {"provider": {"carbon_intensity": 1}} )
+
+    async def fake_fetch_latest(db, region): return {"provider": {"carbon_intensity": 1}}
+    monkeypatch.setattr(app_module, "fetch_latest", fake_fetch_latest)
 
     await get_current_carbon_intensity(region="FR", update=True, db=object())
     assert called["region"] == "FR"
@@ -135,7 +139,8 @@ async def test_get_v3_carbon_intensity_current_uses_auth_token(monkeypatch) -> N
 @pytest.mark.asyncio
 async def test_get_current_carbon_intensity_not_found(monkeypatch) -> None:
     """Current endpoint raises 404 when no data."""
-    monkeypatch.setattr(app_module, "fetch_latest", lambda db, region: {})
+    async def fake_fetch_latest(db, region): return {}
+    monkeypatch.setattr(app_module, "fetch_latest", fake_fetch_latest)
     with pytest.raises(HTTPException) as exc:
         await get_current_carbon_intensity(region="DE", update=False, db=object())
     assert exc.value.status_code == 404
@@ -146,15 +151,12 @@ async def test_get_primary_carbon_intensity_returns_primary(monkeypatch) -> None
     """Primary endpoint returns only the configured primary provider entry."""
     app_module.config = _make_config(primary_provider="energycharts")
 
-    # Stub fetch_latest to simulate DB results
-    monkeypatch.setattr(
-        app_module,
-        "fetch_latest",
-        lambda db, region: [
-            {"provider": "energycharts_de","time": "t1", "carbon_intensity": 111},
+    async def fake_fetch_latest(db, region):
+        return [
+            {"provider": "energycharts_de", "time": "t1", "carbon_intensity": 111},
             {"provider": "bundesnetzagentur_de", "time": "t2", "carbon_intensity": 222},
-        ],
-    )
+        ]
+    monkeypatch.setattr(app_module, "fetch_latest", fake_fetch_latest)
 
     result = await get_primary_carbon_intensity(region="DE", update=False, db=object())
     assert len(result) == 1
@@ -167,13 +169,9 @@ async def test_get_primary_carbon_intensity_missing_primary_data(monkeypatch) ->
     """Primary endpoint raises 404 when primary provider has no data."""
     app_module.config = _make_config(primary_provider="energycharts")
 
-    monkeypatch.setattr(
-        app_module,
-        "fetch_latest",
-        lambda db, region: [
-            {"provider":"bundesnetzagentur", "time": "t2", "carbon_intensity": 222},
-        ],
-    )
+    async def fake_fetch_latest(db, region):
+        return [{"provider": "bundesnetzagentur", "time": "t2", "carbon_intensity": 222}]
+    monkeypatch.setattr(app_module, "fetch_latest", fake_fetch_latest)
 
     with pytest.raises(HTTPException) as exc:
         await get_primary_carbon_intensity(region="DE", update=False, db=object())
@@ -189,7 +187,7 @@ async def test_get_v3_carbon_intensity_history_returns_last_24_hours(monkeypatch
     t1 = datetime(2024, 1, 1, tzinfo=timezone.utc)
     t2 = datetime(2024, 1, 2, tzinfo=timezone.utc)
 
-    def fake_fetch_between(db, region, start, end, provider=None):
+    async def fake_fetch_between(db, region, start, end, provider=None):
         captured["region"] = region
         captured["start"] = start
         captured["end"] = end
@@ -235,7 +233,10 @@ async def test_get_v3_carbon_intensity_history_uses_auth_token(monkeypatch) -> N
 async def test_get_carbon_intensity_history(monkeypatch) -> None:
     """History endpoint returns windowed data."""
     sample = [{"time": "t1"}, {"time": "t2"}]
-    monkeypatch.setattr(app_module, "fetch_between", lambda db, region, start, end, provider=None: sample)
+
+    async def fake_fetch_between(db, region, start, end, provider=None): return sample
+    monkeypatch.setattr(app_module, "fetch_between", fake_fetch_between)
+
     result = await get_carbon_intensity_history(
         region="DE", startTime="2025-09-22T10:00:00Z", endTime="2025-09-22T12:00:00Z", db=object()
     )
@@ -247,21 +248,21 @@ async def test_health_check(monkeypatch) -> None:
     """Health endpoint reports providers and record count."""
     monkeypatch.setattr(app_module, "get_providers", lambda: {"p1": object(), "p2": object()})
 
+    async def fake_fetch_regions(db): return ["DE", "FR"]
+    monkeypatch.setattr(app_module, "fetch_regions", fake_fetch_regions)
+
     class DummyCursor:
-        def __enter__(self):
+        async def __aenter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb):
+        async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        def execute(self, *_args, **_kwargs):
+        async def execute(self, *_args, **_kwargs):
             return None
 
-        def fetchone(self):
+        async def fetchone(self):
             return (5,)
-
-        def fetchall(self):
-            return [{"region": "DE"}, {"region": "FR"}]
 
     class DummyDB:
         def cursor(self, *args, **kwargs):

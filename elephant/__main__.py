@@ -13,12 +13,14 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    extra = {} if args.debug else {"workers": 4}
     uvicorn.run(
         "elephant.app:app",
         host=args.host,
         port=args.port,
         reload=args.debug,
         log_level="debug" if args.debug else "info",
+        **extra,
     )
 
 
