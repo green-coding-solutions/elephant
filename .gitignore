@@ -26,3 +26,6 @@ config.yml
 
 .idea/*
 *.back
+
+# Startup script for daemon mode
+startup-docker.sh
