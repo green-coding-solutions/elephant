@@ -142,9 +142,9 @@ def test_run_cron_uses_historical_by_default(monkeypatch) -> None:
     assert conn.commits == 1
 
 
-def test_run_cron_skips_source_if_update_iterval_not_elapsed(monkeypatch) -> None:
+def test_run_cron_skips_source_if_update_interval_not_elapsed(monkeypatch) -> None:
     provider = _CountingProvider()
-    cfg = _make_config(Source(region="DE", provider="energycharts", update_iterval=15))
+    cfg = _make_config(Source(region="DE", provider="energycharts", update_interval=15))
     conn = _FakeConnection()
     conn.last_runs["energycharts_de"] = datetime.now(tz=timezone.utc)
 
@@ -164,9 +164,9 @@ def test_run_cron_skips_source_if_update_iterval_not_elapsed(monkeypatch) -> Non
     assert conn.commits == 0
 
 
-def test_run_cron_runs_source_if_update_iterval_elapsed(monkeypatch) -> None:
+def test_run_cron_runs_source_if_update_interval_elapsed(monkeypatch) -> None:
     provider = _CountingProvider()
-    cfg = _make_config(Source(region="DE", provider="energycharts", update_iterval=15))
+    cfg = _make_config(Source(region="DE", provider="energycharts", update_interval=15))
     conn = _FakeConnection()
     previous_run = datetime.now(tz=timezone.utc) - timedelta(seconds=16)
     conn.last_runs["energycharts_de"] = previous_run
@@ -188,9 +188,9 @@ def test_run_cron_runs_source_if_update_iterval_elapsed(monkeypatch) -> None:
     assert conn.last_runs["energycharts_de"] > previous_run
 
 
-def test_run_cron_force_run_bypasses_update_iterval(monkeypatch) -> None:
+def test_run_cron_force_run_bypasses_update_interval(monkeypatch) -> None:
     provider = _CountingProvider()
-    cfg = _make_config(Source(region="DE", provider="energycharts", update_iterval=30))
+    cfg = _make_config(Source(region="DE", provider="energycharts", update_interval=30))
     conn = _FakeConnection()
     conn.last_runs["energycharts_de"] = datetime.now(tz=timezone.utc)
 

@@ -33,7 +33,7 @@ class Source(BaseModel):
     provider: str
     api_token: Optional[str] = None
     resolution: Optional[str] = None
-    update_iterval: Optional[int] = Field(default=None, ge=1)
+    update_interval: Optional[int] = Field(default=None, ge=1)
     only_get_current: bool = False
     primary: bool = False
 

@@ -85,11 +85,11 @@ def run_cron(specific_region=None, specific_provider=None) -> None:
                 logger.warning("Provider '%s' for region '%s' is not configured or enabled.", provider_db_name, region)
                 continue
 
-            if not _is_source_due(cur, provider_db_name, source.update_iterval, force_run=force_run):
+            if not _is_source_due(cur, provider_db_name, source.update_interval, force_run=force_run):
                 logger.debug(
-                    "Skipping '%s' due to update_iterval=%s seconds.",
+                    "Skipping '%s' due to update_interval=%s seconds.",
                     provider_db_name,
-                    source.update_iterval,
+                    source.update_interval,
                 )
                 continue
 

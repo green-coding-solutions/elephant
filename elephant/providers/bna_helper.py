@@ -55,7 +55,7 @@ LOAD_FILTER = 410
 
 def fetch_json(url: str) -> Optional[dict]:
     try:
-        response = requests.get(url, timeout=30.0)
+        response = requests.get(url, timeout=5.0)
         response.raise_for_status()
         return response.json()
     except (requests.RequestException, ValueError):

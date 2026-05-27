@@ -33,7 +33,7 @@ class ElectricityMapsProvider(CarbonIntensityProvider):
     def _get(self, path: str, params: dict) -> Response:
         """Perform a GET request with shared error handling."""
         try:
-            response = requests.get(f"{BASE_URL}{path}", params=params, timeout=30.0, headers=self.headers)
+            response = requests.get(f"{BASE_URL}{path}", params=params, timeout=5.0, headers=self.headers)
             response.raise_for_status()
             return response
 

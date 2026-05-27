@@ -29,7 +29,7 @@ class EnergyChartsProvider(CarbonIntensityProvider):
     def _get(self, region: str) -> dict:
         """Perform a GET request with shared error handling."""
         try:
-            response = requests.get(f"{BASE_URL}/co2eq", params={"country": region.lower()}, timeout=30.0)
+            response = requests.get(f"{BASE_URL}/co2eq", params={"country": region.lower()}, timeout=5.0)
             response.raise_for_status()
             return response.json()
         except (HTTPError, RequestException) as exc:
