@@ -1,4 +1,4 @@
-FROM python:3.14.2-slim-trixie
+FROM python:3.14.6-slim-trixie
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
