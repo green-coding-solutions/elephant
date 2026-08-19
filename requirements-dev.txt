@@ -16,4 +16,4 @@ types-PyYAML>=6.0.12.20260724
 black>=26.5.1
 
 # Pre-commit hooks
-pre-commit>=4.6.1
+pre-commit>=4.6.2
