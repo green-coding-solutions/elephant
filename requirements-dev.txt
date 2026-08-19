@@ -6,7 +6,7 @@ pytest-cov>=7.1.0
 pytest-asyncio>=1.4.0
 
 # Code quality
-pylint>=4.0.6
+pylint>=4.0.7
 
 # Type checking
 mypy>=2.3.0
