@@ -9,7 +9,7 @@ pytest-asyncio>=1.4.0
 pylint>=4.1.2
 
 # Type checking
-mypy>=2.3.1
+mypy>=2.4.0
 types-PyYAML>=6.0.12.20260906
 
 # Code formatting
