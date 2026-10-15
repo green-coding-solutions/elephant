@@ -13,7 +13,7 @@ mypy>=2.4.0
 types-PyYAML>=6.0.12.20260906
 
 # Code formatting
-black>=26.5.1
+black>=26.10.1
 
 # Pre-commit hooks
 pre-commit>=4.6.2
