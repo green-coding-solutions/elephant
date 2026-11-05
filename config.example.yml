@@ -32,6 +32,10 @@ cron:
     #   resolution: "5_minutes"
     #   update_interval: 3600 # every hour
     #   only_get_current: false
+    # - region: "FR" # entsoe supports "DE", "FR" and "ES"
+    #   provider: "entsoe"
+    #   api_token: "YOUR TOKEN HERE"
+    #   update_interval: 900 # every 15 minutes
 
 # Logging
 logging:

@@ -7,6 +7,7 @@ from .electricitymaps import ElectricityMapsProvider
 from .bundesnetzagentur import BundesnetzagenturProvider
 from .bundesnetzagentur_all import BundesnetzagenturProvider as BundesnetzagenturAllProvider
 from .energycharts import EnergyChartsProvider
+from .entsoe import EntsoeProvider
 from ..config import ProviderConfig, config
 
 logging.basicConfig(level=config.logging.level)
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 _PROVIDER_FACTORIES: dict[str, Callable[[ProviderConfig], CarbonIntensityProvider]] = {
     "electricitymaps": ElectricityMapsProvider,
     "energycharts": EnergyChartsProvider,
+    "entsoe": EntsoeProvider,
     "bundesnetzagentur": BundesnetzagenturProvider,
     "bundesnetzagentur_all": BundesnetzagenturAllProvider,
 }

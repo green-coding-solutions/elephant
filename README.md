@@ -36,6 +36,8 @@ Set `update_interval` (seconds) on a source to run it less frequently than the g
 
 For ElectricityMaps: Replace "your-electricitymaps-api-token-here" with your actual token. You don't need to modify anything to start collection. We use free endpoints per default.
 
+For ENTSO-E: Register at the [Transparency Platform](https://transparency.entsoe.eu/), then email transparency@entsoe.eu with "RESTful API access" in the subject and your registered address in the body. Once access is granted, generate a token under "My Account" and add it as `api_token` on an `entsoe` source. Supported regions are `DE`, `FR` and `ES`. ENTSO-E publishes generation per production type, so Elephant derives the carbon intensity from lifecycle emission factors. Imports and exports are not considered.
+
 
 ## Running
 
