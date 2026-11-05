@@ -1,19 +1,29 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
+# Dependabot version updates
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Note: `directory` must point to a DIRECTORY (folder), not a manifest file.
+# Dependabot searches that folder for supported manifests.
 
 version: 2
 updates:
+  # docker-compose.yml (service image tags, e.g. timescale/timescaledb)
   - package-ecosystem: "docker-compose"
-    directory: "/docker-compose.yml"
+    directory: "/"
     schedule:
       interval: "weekly"
+
+  # Python deps. Dependabot scans the directory and updates ALL
+  # requirements files it finds here, so this single "/" entry covers
+  # both requirements.txt AND requirements-dev.txt (each gets its own PRs).
+  # Dependabot targets directories, not individual files — a second pip
+  # block at "/" would collide and is neither possible nor needed.
   - package-ecosystem: "pip"
-    directory: "/requirements.txt"
+    directory: "/"
     schedule:
       interval: "weekly"
-  - package-ecosystem: "pip"
-    directory: "/requirements-dev.txt"
+
+  # Dockerfile base image (python:3.14.2-slim-trixie)
+  - package-ecosystem: "docker"
+    directory: "/"
     schedule:
       interval: "weekly"
