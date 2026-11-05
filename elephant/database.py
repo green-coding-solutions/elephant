@@ -70,13 +70,14 @@ async def connection_dependency() -> AsyncGenerator[AsyncConnection, None]:
 # --- Query helpers (async, used by web server endpoints) ---
 
 async def fetch_latest(conn: AsyncConnection, region: str) -> list[dict]:
-    """Return the most recent row for each provider at a region."""
+    """Return the most recent non-future row for each provider at a region."""
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """
             SELECT DISTINCT ON (provider) provider, time, carbon_intensity::double precision, estimation
             FROM carbon
             WHERE region = %s
+              AND time <= now()
             ORDER BY provider, time DESC;
             """,
             (region,),
