@@ -102,17 +102,21 @@ async def test_get_current_carbon_intensity_uses_simulation_when_provided(monkey
 async def test_get_v3_carbon_intensity_current_formats_primary(monkeypatch) -> None:
     """v3 current endpoint returns EM formatted payload from primary data."""
     sample_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    monkeypatch.setattr(
-        app_module,
-        "get_primary_carbon_intensity",
-        lambda region, update, db: {"primary": {"time": sample_time, "carbon_intensity": 111}},
-    )
+
+    async def fake_fetch_latest(_db, _region):
+        return [
+            {"provider": "bundesnetzagentur_de", "time": sample_time, "carbon_intensity": 222, "estimation": False},
+            {"provider": "energycharts_de", "time": sample_time, "carbon_intensity": 111, "estimation": False},
+        ]
+
+    monkeypatch.setattr(app_module, "config", _make_config())
+    monkeypatch.setattr(app_module, "fetch_latest", fake_fetch_latest)
 
     result = await get_v3_carbon_intensity_current(zone="de", db=object())
 
     assert result["zone"] == "DE"
     assert result["carbonIntensity"] == 111.0
-    assert result["datetime"].endswith("Z")
+    assert result["datetime"] == "2024-01-01T00:00:00Z"
     assert result["temporalGranularity"] == "notimplemented"
     assert result["emissionFactorType"] == "lifecycle"
 
