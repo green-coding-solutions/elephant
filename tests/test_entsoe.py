@@ -9,9 +9,13 @@ from fastapi import HTTPException
 
 from elephant.config import ProviderConfig
 from elephant.providers import entsoe
+from elephant.providers.emission_factors import EMISSION_FACTORS
 from elephant.providers.entsoe import EntsoeProvider
 from elephant.providers.helpers import _PROVIDER_FACTORIES
 
+GAS = EMISSION_FACTORS["natural_gas"]
+NUCLEAR = EMISSION_FACTORS["nuclear"]
+WIND_ONSHORE = EMISSION_FACTORS["wind_onshore"]
 TOKEN = "secret-token"
 START = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
 END = datetime(2024, 1, 1, 1, 0, tzinfo=timezone.utc)
@@ -73,7 +77,7 @@ def test_intensity_is_generation_weighted_and_includes_nuclear(monkeypatch) -> N
     assert rows[0]["region"] == "FR"
     assert rows[0]["resolution"] == "60_minutes"
     assert rows[0]["estimation"] is False
-    assert rows[0]["carbon_intensity"] == pytest.approx((900 * 12 + 100 * 490) / 1000)
+    assert rows[0]["carbon_intensity"] == pytest.approx((900 * NUCLEAR + 100 * GAS) / 1000)
 
 
 def test_consumption_and_storage_are_excluded(monkeypatch) -> None:
@@ -86,7 +90,7 @@ def test_consumption_and_storage_are_excluded(monkeypatch) -> None:
 
     rows = _provider(monkeypatch, xml_text).get_historical("DE", START, END)
 
-    assert [row["carbon_intensity"] for row in rows] == [pytest.approx(11)]
+    assert [row["carbon_intensity"] for row in rows] == [pytest.approx(WIND_ONSHORE)]
 
 
 def test_a03_repeats_values_for_left_out_positions(monkeypatch) -> None:
@@ -95,8 +99,8 @@ def test_a03_repeats_values_for_left_out_positions(monkeypatch) -> None:
     rows = _provider(monkeypatch, xml_text).get_historical("DE", START, END)
 
     assert [row["time"] for row in rows] == [_at(0), _at(15), _at(30), _at(45)]
-    expected_low = (100 * 11 + 100 * 490) / 200
-    expected_high = (300 * 11 + 100 * 490) / 400
+    expected_low = (100 * WIND_ONSHORE + 100 * GAS) / 200
+    expected_high = (300 * WIND_ONSHORE + 100 * GAS) / 400
     assert [row["carbon_intensity"] for row in rows] == pytest.approx(
         [expected_low, expected_low, expected_high, expected_high]
     )
