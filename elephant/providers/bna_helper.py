@@ -2,53 +2,48 @@ import requests
 from datetime import datetime, timezone
 from typing import Optional
 
-BASE = "https://www.smard.de/app/chart_data"
+from elephant.providers.emission_factors import EMISSION_FACTORS
 
-# All Numbers from https://www.umweltbundesamt.de/sites/default/files/medien/11850/publikationen/03_2025_cc_emissionsbilanz_erneuerbarer_energien_2023.pdf
+BASE ="https://www.smard.de/app/chart_data"
+
+# SMARD filters with their factors. Storage (4070 Pumpspeicher) is left out, see emission_factors.py.
 filters = {
     # Braunkohle
-    "1223": 409.03,  # Page 50, Tabelle 6
+    "1223": EMISSION_FACTORS["lignite"],
 
     # Kernenergie
-    #"1224": 18.27 ,    # Page 50, Tabelle 6
+    #"1224": EMISSION_FACTORS["nuclear"],
 
     # Wind Offshore
-    "1225": 9.62 ,    # Page 60
+    "1225": EMISSION_FACTORS["wind_offshore"],
 
     # Wasserkraft
-    "1226": 2.66 ,   # Page 62
+    "1226": EMISSION_FACTORS["hydro"],
 
     # Sonstige Konventionelle
     # SMARD: Abgeleitetes Gas aus Kohle, Mineralöl, Abfall, Gichtgas, Hochofengas, Raffineriegas,
     # Gas mit hohem Wasserstoffanteil, sonstige Reststoffe. [SMARD FAQ]
-    "1227": 312.70 ,   # Sonstige Konventionelle (approx., based on Heizöl + heavy fossil mix)
+    "1227": EMISSION_FACTORS["other_conventional"],
 
     # Sonstige Erneuerbare
     # SMARD: Erdwärme, Deponiegas, Klärgas, Grubengas. [SMARD FAQ]
-    # UBA provides explicit data for Klärgas and Deponiegas (Sections 4.9 and 4.10):
-    #   Klärgas: generation 1,529 GWh (Table 44), caused CO2-Äq. 160,209 t (Table 48).
-    #   Deponiegas: generation 187 GWh (Table 49), caused CO2-Äq. 25,309 t (Table 53).
-    # Combined factor = 185,518 t / 1,716 GWh ≈ 108.1 g/kWh.
-    # Geothermie and Grubengas are small in volume; we neglect them in the average.
-    "1228": 108.1,   # Sonstige Erneuerbare (Klär- + Deponiegas mix; approx., excludes Erdwärme/Grubengas)
+    # The factor covers Klär- and Deponiegas. Geothermie and Grubengas are small in volume; we neglect them in the average.
+    "1228": EMISSION_FACTORS["other_renewable"],
 
     # Biomasse
-    "4066": 125.96,   # Biomasse (142,96 + 108,96)/2 Page 81
+    "4066": EMISSION_FACTORS["biomass"],
 
     # Wind Onshore
-    "4067": 17.61,    # Page 57
+    "4067": EMISSION_FACTORS["wind_onshore"],
 
     # Photovoltaik
-    "4068": 56.51 ,    # Page 53
+    "4068": EMISSION_FACTORS["solar"],
 
     # Steinkohle
-    "4069": 382.51 ,   # Page 50
-
-    # Pumpspeicher
-    "4070": 23.82,     # Page 62
+    "4069": EMISSION_FACTORS["hard_coal"],
 
     # Erdgas
-    "4071": 256.32 ,   # Page 50
+    "4071": EMISSION_FACTORS["natural_gas"],
 }
 
 LOAD_FILTER = 410

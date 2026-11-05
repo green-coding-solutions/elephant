@@ -20,6 +20,7 @@ from requests import RequestException
 from elephant.config import ProviderConfig
 
 from .base import CarbonIntensityProvider
+from .emission_factors import EMISSION_FACTORS
 
 
 logger = logging.getLogger(__name__)
@@ -36,32 +37,27 @@ AREA_CODES = {
     "FR": "10YFR-RTE------C",
 }
 
-# Lifecycle gCO2eq/kWh per production type, using the values and the type mapping of Electricity Maps:
-# https://github.com/electricitymaps/electricitymaps-contrib/blob/master/config/defaults.yaml
-# https://github.com/electricitymaps/electricitymaps-contrib/blob/master/electricitymap/contrib/parsers/ENTSOE.py
-#
-# Storage (B10 pumped hydro, B25 energy storage) is left out on purpose. It releases energy that was already
-# generated, so counting its discharge would count that energy twice.
-EMISSION_FACTORS = {
-    "B01": 230,  # Biomass
-    "B02": 820,  # Fossil Brown coal/Lignite
-    "B03": 490,  # Fossil Coal-derived gas
-    "B04": 490,  # Fossil Gas
-    "B05": 820,  # Fossil Hard coal
-    "B06": 650,  # Fossil Oil
-    "B07": 820,  # Fossil Oil shale
-    "B08": 820,  # Fossil Peat
-    "B09": 38,   # Geothermal
-    "B11": 24,   # Hydro Run-of-river and pondage
-    "B12": 24,   # Hydro Water Reservoir
-    "B13": 700,  # Marine (unknown)
-    "B14": 12,   # Nuclear
-    "B15": 700,  # Other renewable (unknown)
-    "B16": 45,   # Solar
-    "B17": 230,  # Waste
-    "B18": 11,   # Wind Offshore
-    "B19": 11,   # Wind Onshore
-    "B20": 700,  # Other (unknown)
+# Production types and their entries in EMISSION_FACTORS. Storage (B10 pumped hydro, B25 energy storage) is left out.
+PSR_TYPES = {
+    "B01": "biomass",
+    "B02": "lignite",
+    "B03": "coal_derived_gas",
+    "B04": "natural_gas",
+    "B05": "hard_coal",
+    "B06": "oil",
+    "B07": "oil_shale",
+    "B08": "peat",
+    "B09": "geothermal",
+    "B11": "hydro_run_of_river",
+    "B12": "hydro_reservoir",
+    "B13": "marine",
+    "B14": "nuclear",
+    "B15": "other_renewable",
+    "B16": "solar",
+    "B17": "waste",
+    "B18": "wind_offshore",
+    "B19": "wind_onshore",
+    "B20": "other_conventional",
 }
 
 
@@ -93,7 +89,7 @@ def _parse_generation(xml_text: str) -> tuple[dict[datetime, dict[str, float]], 
         psr_type = series.findtext("{*}MktPSRType/{*}psrType")
 
         # Series with outBiddingZone_Domain hold consumption, for example pumping water uphill
-        if series.find("{*}inBiddingZone_Domain.mRID") is None or psr_type not in EMISSION_FACTORS:
+        if series.find("{*}inBiddingZone_Domain.mRID") is None or psr_type not in PSR_TYPES:
             continue
 
         # A03 leaves out positions whose value did not change. In A01 a left out position is a missing value.
@@ -185,7 +181,7 @@ class EntsoeProvider(CarbonIntensityProvider):
                 {
                     "region": region,
                     "time": time,
-                    "carbon_intensity": sum(mw * EMISSION_FACTORS[psr] for psr, mw in mix.items()) / total_mw,
+                    "carbon_intensity": sum(mw * EMISSION_FACTORS[PSR_TYPES[psr]] for psr, mw in mix.items()) / total_mw,
                     "provider": PROVIDER_NAME,
                     "resolution": self.config.resolution or f"{int(finest.total_seconds() // 60)}_minutes",
                     "estimation": False,

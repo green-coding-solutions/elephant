@@ -40,6 +40,7 @@ Rules that span files:
 
 - **Provider names:** `carbon.provider` stores `{provider}_{region}` in lowercase (`energycharts_de`), not the name a provider returns. Primary lookups and the `provider` filter match on this value.
 - **New providers:** subclass `CarbonIntensityProvider` and register it in `_PROVIDER_FACTORIES` (`elephant/providers/helpers.py`). Cron calls `get_historical(region)` without a time range, so `start_time` and `end_time` need defaults. Rows must have exactly the keys `region`, `time`, `carbon_intensity`, `provider`, `resolution` and `estimation`.
+- **Emission factors:** providers that derive carbon intensity from a generation mix map their codes to the shared table in `elephant/providers/emission_factors.py` rather than defining their own values.
 - **Provider errors:** raise `fastapi.HTTPException` on fetch failures, which skips that source for the round. Any other exception stops cron and therefore the container.
 - **Schema changes:** add a numbered SQL file to `migrations/`. `elephant.database` applies each file once, in filename order.
 - **Simulations:** `simulationId` on `/carbon-intensity/*`, or the `auth-token` header on the Electricity Maps-compatible `/v3/*` endpoints, serves simulated values instead of stored data.
