@@ -44,3 +44,7 @@ Rules that span files:
 - **Schema changes:** add a numbered SQL file to `migrations/`. `elephant.database` applies each file once, in filename order.
 - **Simulations:** `simulationId` on `/carbon-intensity/*`, or the `auth-token` header on the Electricity Maps-compatible `/v3/*` endpoints, serves simulated values instead of stored data.
 - **Tests** call endpoint functions directly with fake connections, so they never run SQL or migrations.
+
+## API sources
+
+Provider API docs and emission factor sources are in `API_SOURCES.md`. Read it only when you need them, and add new API links there rather than here.
