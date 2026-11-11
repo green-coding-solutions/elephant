@@ -105,7 +105,7 @@ async def test_get_v3_carbon_intensity_current_formats_primary(monkeypatch) -> N
     monkeypatch.setattr(
         app_module,
         "get_primary_carbon_intensity",
-        lambda region, update, db: {"primary": {"time": sample_time, "carbon_intensity": 111}},
+        lambda region, update, db: [{"provider": "energycharts_de", "time": sample_time, "carbon_intensity": 111}],
     )
 
     result = await get_v3_carbon_intensity_current(zone="de", db=object())

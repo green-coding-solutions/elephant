@@ -382,10 +382,9 @@ async def get_v3_carbon_intensity_current(
     primary_result = get_primary_carbon_intensity(region=normalized_zone, update=False, db=db)
     primary = await primary_result if inspect.isawaitable(primary_result) else primary_result  # We need to do this because of the monkeypatching in tests
 
-    data = next(iter(primary.values()))
-    timestamp = data.get("time") if isinstance(data, dict) else None
+    data = primary[0]
 
-    return _format_em_current(normalized_zone, data.get("carbon_intensity"), timestamp=timestamp)
+    return _format_em_current(normalized_zone, data.get("carbon_intensity"), timestamp=data.get("time"))
 
 
 @app.get("/v3/carbon-intensity/history")
