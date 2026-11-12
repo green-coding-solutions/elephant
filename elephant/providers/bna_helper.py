@@ -48,6 +48,10 @@ filters = {
 
 LOAD_FILTER = 410
 
+# SMARD publishes weekly chunks starting Monday 00:00. Two chunks always cover at least the last 7 days, so late
+# corrections get re-fetched.
+RECENT_CHUNKS = 2
+
 def fetch_json(url: str) -> Optional[dict]:
     try:
         response = requests.get(url, timeout=5.0)
@@ -91,7 +95,7 @@ def get_co2intensity(region: str, resolution: str, scan_all: bool = False) -> Op
         return None
 
     if not scan_all:
-        time_stamps = [max(time_stamps)]
+        time_stamps = sorted(time_stamps)[-RECENT_CHUNKS:]
 
     ci = {}  # timestamp_ms → gCO2eq/kWh
 
@@ -107,8 +111,10 @@ def get_co2intensity(region: str, resolution: str, scan_all: bool = False) -> Op
 
         for f_id in filters:
             gen_series = get_series(f_id, ts, region, resolution)
+
+            # Skipping a production type would compute the intensity without it, so a failed fetch fails the round
             if gen_series is None:
-                continue
+                return None
 
             generation_series[f_id] = dict(gen_series)
 
