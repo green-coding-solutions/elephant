@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://web-api.tp.entsoe.eu/api"
 PROVIDER_NAME = "entsoe"
-HISTORY_WINDOW = timedelta(hours=24)
+# ENTSO-E publishes late data days later. The window is also what the completeness check in get_historical compares
+# against, so a production type missing for a whole day is still noticed.
+HISTORY_WINDOW = timedelta(days=7)
 REQUEST_TIMEOUT_SECONDS = 30
 
 # https://transparencyplatform.zendesk.com/hc/en-us/articles/15885757676308
@@ -168,7 +170,8 @@ class EntsoeProvider(CarbonIntensityProvider):
             raise HTTPException(status_code=502, detail="ENTSO-E returned an unexpected response") from exc
 
         # Production types publish with different delays. Without a late type the result would be badly skewed, for
-        # example France without nuclear, so we only use timestamps for which all types have reported.
+        # example France without nuclear, so we only use timestamps for which all types have reported. "All" means every
+        # type seen in the requested window, so a type that misses the whole window goes unnoticed.
         reporting_types = {psr_type for mix in generation.values() for psr_type in mix}
 
         entries = []

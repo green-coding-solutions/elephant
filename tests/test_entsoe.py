@@ -1,7 +1,7 @@
 """Tests for the ENTSO-E provider."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import requests
@@ -236,3 +236,17 @@ def test_request_failure_does_not_expose_the_token(monkeypatch, caplog) -> None:
     assert exc.value.__suppress_context__ is True
     assert TOKEN not in str(exc.value.detail)
     assert TOKEN not in caplog.text
+
+
+def test_default_window_is_seven_days(monkeypatch) -> None:
+    captured = {}
+    provider = EntsoeProvider(ProviderConfig(api_token=TOKEN))
+
+    def fake_get(region, start, end):
+        captured.update(start=start, end=end)
+        return _document()
+
+    monkeypatch.setattr(provider, "_get", fake_get)
+    provider.get_historical("DE", end_time=END)
+
+    assert END - captured["start"] == timedelta(days=7)
