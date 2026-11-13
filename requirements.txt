@@ -1,6 +1,6 @@
 fastapi==0.162.2
 uvicorn==0.54.0
-psycopg==3.3.6
+psycopg==3.3.8
 psycopg-pool==3.3.3
 requests==2.34.2
 PyYAML==6.0.3
