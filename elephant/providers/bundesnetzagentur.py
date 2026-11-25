@@ -56,7 +56,7 @@ class BundesnetzagenturProvider(CarbonIntensityProvider):
         for entry in data:
             ts = entry.get("time", None)
 
-            if end_time and ts < end_time:
+            if start_time and ts < start_time:
                 continue
 
             if end_time and ts > end_time:

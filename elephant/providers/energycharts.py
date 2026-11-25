@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://api.energy-charts.info"
 PROVIDER_NAME = "energycharts"
 RESOLUTION="15_minutes"
+# Energy-Charts corrects values for days. Cron re-fetches this window so corrections overwrite stored values.
+HISTORY_WINDOW = timedelta(days=7)
 
 class EnergyChartsProvider(CarbonIntensityProvider):
     """Provider for EnergyCharts carbon intensity data."""
@@ -26,10 +28,19 @@ class EnergyChartsProvider(CarbonIntensityProvider):
         self.config = config
         self.resolution = config.resolution or RESOLUTION
 
-    def _get(self, region: str) -> dict:
-        """Perform a GET request with shared error handling."""
+    def _get(self, region: str, start_time: datetime = None, end_time: datetime = None) -> dict:
+        """Perform a GET request with shared error handling.
+
+        Without a time range the API returns today and tomorrow in German local time.
+        """
+        params = {"country": region.lower()}
+        if start_time:
+            params["start"] = start_time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+        if end_time:
+            params["end"] = end_time.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+
         try:
-            response = requests.get(f"{BASE_URL}/co2eq", params={"country": region.lower()}, timeout=5.0)
+            response = requests.get(f"{BASE_URL}/co2eq", params=params, timeout=5.0)
             response.raise_for_status()
             return response.json()
         except (HTTPError, RequestException) as exc:
@@ -83,12 +94,12 @@ class EnergyChartsProvider(CarbonIntensityProvider):
 
     def get_historical(self, region: str, start_time: datetime = None, end_time: datetime = None) -> List[dict]:
         """Get historical carbon intensity data for a region and time range."""
-        if start_time is None:
-            start_time = datetime.now(tz=timezone.utc) - timedelta(hours=24)
         if end_time is None:
             end_time = datetime.now(tz=timezone.utc)
+        if start_time is None:
+            start_time = end_time - HISTORY_WINDOW
 
-        data = self._get(region)
+        data = self._get(region, start_time, end_time)
         entries = self._build_entries(data, region.upper())
 
         return [entry for entry in entries if start_time <= entry["time"] <= end_time]

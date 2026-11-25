@@ -70,13 +70,14 @@ async def connection_dependency() -> AsyncGenerator[AsyncConnection, None]:
 # --- Query helpers (async, used by web server endpoints) ---
 
 async def fetch_latest(conn: AsyncConnection, region: str) -> list[dict]:
-    """Return the most recent row for each provider at a region."""
+    """Return the most recent non-future row for each provider at a region."""
     async with conn.cursor(row_factory=dict_row) as cur:
         await cur.execute(
             """
             SELECT DISTINCT ON (provider) provider, time, carbon_intensity::double precision, estimation
             FROM carbon
             WHERE region = %s
+              AND time <= now()
             ORDER BY provider, time DESC;
             """,
             (region,),
@@ -129,6 +130,29 @@ async def fetch_regions(conn: AsyncConnection) -> list[str]:
 
 # --- Schema init (sync, run once at container startup) ---
 
+def update_timescaledb_extension() -> None:
+    """Upgrade the installed timescaledb extension to the version shipped by the image.
+
+    Postgres never upgrades extensions on its own, so a database created by an older
+    image keeps its old extension version after the image is bumped. TimescaleDB
+    requires ALTER EXTENSION ... UPDATE to be the first command in a fresh session,
+    which is why the update runs on its own connection, separate from the version check.
+    """
+    with db_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT installed_version, default_version FROM pg_available_extensions "
+            "WHERE name = 'timescaledb';"
+        )
+        row = cur.fetchone()
+    if row is None or row[0] is None or row[0] == row[1]:
+        return
+
+    logger.info("Updating timescaledb extension from %s to %s ...", row[0], row[1])
+    with db_connection() as conn:
+        conn.autocommit = True
+        conn.execute("ALTER EXTENSION timescaledb UPDATE;")
+
+
 def init_db() -> None:
     """Create TimescaleDB extension and the carbon hypertable."""
     ddl = """
@@ -166,6 +190,8 @@ def init_db() -> None:
       last_run  TIMESTAMPTZ NOT NULL
     );
     """
+
+    update_timescaledb_extension()
 
     with db_connection() as conn, conn.cursor() as cur:
         logger.info("Initializing TimescaleDB schema at %s ...", conn.info.host)
