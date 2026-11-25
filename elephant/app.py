@@ -1,6 +1,5 @@
 """Main FastAPI application for Elephant service."""
 
-import inspect
 import logging
 import re
 from contextlib import asynccontextmanager
@@ -379,12 +378,10 @@ async def get_v3_carbon_intensity_current(
         sim_result = await get_simulation_carbon(simulationId=auth_token, db=db)
         return _format_em_current(normalized_zone, sim_result["carbon_intensity"])
 
-    primary_result = get_primary_carbon_intensity(region=normalized_zone, update=False, db=db)
-    primary = await primary_result if inspect.isawaitable(primary_result) else primary_result  # We need to do this because of the monkeypatching in tests
-
+    primary = await get_primary_carbon_intensity(region=normalized_zone, update=False, db=db)
     data = primary[0]
 
-    return _format_em_current(normalized_zone, data.get("carbon_intensity"), timestamp=data.get("time"))
+    return _format_em_current(normalized_zone, data["carbon_intensity"], timestamp=data["time"])
 
 
 @app.get("/v3/carbon-intensity/history")
