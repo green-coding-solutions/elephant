@@ -10,7 +10,7 @@ pylint>=4.1.4
 
 # Type checking
 mypy>=2.4.1
-types-PyYAML>=6.0.12.20261113
+types-PyYAML>=6.0.12.20261122
 
 # Code formatting
 black>=26.10.1
